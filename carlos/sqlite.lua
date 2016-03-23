@@ -20,9 +20,10 @@ _ENV = nil
 -- Local variables for module-only access (private)
 local noTable = "no such table:"
 local isTable = "SELECT * FROM %q LIMIT 1"
-local newTable = "CREATE TABLE IF NOT EXISTS %q ( %s TEXT )"
+local newTable = "CREATE TABLE IF NOT EXISTS %q ( %s )"
 local inTable = "INSERT INTO %q VALUES( %s )"
 local upTable = "UPDATE %q SET %s = ? WHERE %s = ?"
+local rmTable = "DELETE FROM %q WHERE %s = ?"
 local mquery = [[
 	SELECT sql, name, tbl_name, rowid FROM sqlite_master
 	WHERE type != 'meta' AND sql NOTNULL AND name NOT LIKE 'sqlite_%'
@@ -72,6 +73,12 @@ local function connect( dbname )
 	return string.format(upTable, tbname, args[2], table.concat(args[3], ' = ? AND ') )
     end
 
+    function MM.rmQuery( args )
+	local tbname = args[1]
+	assert(exits(tbname))
+	return string.format(rmTable, tbname, table.concat(args[2], ' = ? AND ') )
+    end
+
     function MM.header( tbname )
  	local schema = fd.first( rows( mquery ), function(x) return x.name:find( tbname ) end )
 	assert( schema, 'Table not found.' )
@@ -117,6 +124,10 @@ end
 
 function M.update( args )
     return into( 'upQuery', args )
+end
+
+function M.delete( args )
+    return into( 'rmQuery', args )
 end
 
 function M.query( dbname, query )

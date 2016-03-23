@@ -70,7 +70,7 @@ end
 
 function M.match(s, pattern, folded)
     local ss = tr.fold()
-    function ss.__ipairs() return s:gmatch(pattern) end
+    function ss.__ipairs() return s:gmatch(pattern), nil, nil end
     if folded then return s
     else return tr:map( function(_,x) return tonumber(x) or x end ) end
 end
