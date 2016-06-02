@@ -39,7 +39,7 @@ local function into( qryfn, args )
 	local insert = conn.sink( qryfn, args )
 	return function(x, i)
 	    local done, msg = insert( x )
-	    if not done then print( msg ) end
+	    if not done then error( msg ) end
 	end
     end
 end
@@ -91,7 +91,7 @@ local function connect( dbname )
 
     function MM.exec( query )
 	local q = assert( conn:prepare( query ) )
-	print('Executing:', q,'\n')
+--	print('Executing:', q,'\n')
 	return conn:exec( q )
     end
 

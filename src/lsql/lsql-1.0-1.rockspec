@@ -10,18 +10,16 @@ description = {
 }
 
 dependencies = {
-    "lua >= 5.1"
+    "lua >= 5.2"
 }
 
 build = {
     type = "builtin",
     modules = {
-	    lsql = {
+	lsql = {
             sources = { "lsql.c" },
 	    libraries = { "sqlite3" },
-	    libdirs = { "$(SQLITE)/lib" },
-	    incdirs = { "$(SQLITE)/include" }
-	    }
+	}
     }
 }
 
