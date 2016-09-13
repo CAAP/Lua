@@ -6,6 +6,7 @@ local assert = assert
 local remove = table.remove
 local huge = math.huge
 local ipairs = ipairs
+local pairs = pairs
 local tonumber = tonumber
 local type = type
 
