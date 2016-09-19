@@ -92,6 +92,8 @@ M.comp = fcomp
 
 function M.wrap( iter ) return function() return _f, iter, 0 end end
 
+function M.keys( t ) return function() return pairs(t) end end
+
 -- loops --
 
 function M.reduce( m, ... ) local _f, _a = comp{...}; for i,x in state(m) do _f(x, i) end; return _a end
