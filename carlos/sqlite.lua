@@ -22,7 +22,7 @@ local noTable = "no such table:"
 local isTable = "SELECT * FROM %q LIMIT 1"
 local newTable = "CREATE TABLE IF NOT EXISTS %q ( %s )"
 local inTable = "INSERT INTO %q VALUES( %s )"
-local upTable = "UPDATE %q SET %s = ? WHERE %s = ?"
+local upTable = "UPDATE %q SET %s = ? WHERE %s LIKE ?"
 local rmTable = "DELETE FROM %q WHERE %s = ?"
 local mquery = [[
 	SELECT sql, name, tbl_name, rowid FROM sqlite_master

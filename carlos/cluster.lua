@@ -2,7 +2,7 @@
 local M = {}
 
 -- Import Section
-local ap = require'lapc'
+--local ap = require'lapc'
 local fd = require'carlos.fold'
 local mt = require'carlos.metric'
 
@@ -79,7 +79,7 @@ function M.affinity(similarities, damping)
    
     table.sort(sims, byindex) -- APCLUSTER requires a proper order of indices
 
-    if sims[1][1] == 1 then fd.reduce( sims, function(s) s[1] = s[1] - 1; s[2] = s[2] - 1 end ) end
+--    if sims[1][1] == 1 then fd.reduce( sims, function(s) s[1] = s[1] - 1; s[2] = s[2] - 1 end ) end
 
 --    return apcluster( sims )
     return sims

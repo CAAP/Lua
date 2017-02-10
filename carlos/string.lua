@@ -3,10 +3,12 @@ local M = {}
 
 -- Import Section
 local ipairs=ipairs
+local pairs=pairs
 local tonumber=tonumber
 local tostring=tostring
 local os = os
 local io = io
+local utf8 = utf8
 
 local string=string
 
@@ -73,6 +75,34 @@ function M.match(s, pattern, folded)
     function ss.__ipairs() return s:gmatch(pattern), nil, nil end
     if folded then return s
     else return tr:map( function(_,x) return tonumber(x) or x end ) end
+end
+
+function M.bigram(s1, s2)
+    local set, all, both, q, p = {}, {}, {}, 0, 0
+
+    for j=2,#s1 do local ss = s1:sub(j-1,j); all[ss] = true; set[ss] = true; end
+
+    for j=2,#s2 do local ss = s2:sub(j-1,j); if set[ss] then both[ss] = true else all[ss] = true end end
+
+    for _ in pairs(all) do p = p + 1 end
+
+    for _ in pairs(both) do q = q + 1 end
+
+    return q / p
+end
+
+function M.jaccard(s1, s2)
+    local set, all, both, q, p = {}, {}, {}, 0, 0
+
+    for _,j in utf8.codes(s1) do all[j] = true; set[j] = true; end
+
+    for _,j in utf8.codes(s2) do if set[j] then both[j] = true else all[j] = true end end
+
+    for _ in pairs(all) do p = p + 1 end
+
+    for _ in pairs(both) do q = q + 1 end
+
+    return q / p
 end
 
 return M
