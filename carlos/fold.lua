@@ -22,6 +22,19 @@ _ENV = nil -- or M
 -- fold f v [] = v | value for empty list
 -- fold f v (x : xs) | f x (fold f v xs) | f is applied to first element, and recursively to next elements
 
+-- Lua Reference Manual
+-- for var_1, ..., var_n in explist do block end
+-- do
+--   local f, s, var = explist
+--   while true do
+--     local var_1, ..., var_n = f(s, var)
+--     if var_1 == nil then break end
+--     var = var_1
+--     block
+--   end
+-- end
+-- explist is evaluted only once, and results in an iterator function, a state and an initial value for the first iterator variable
+
 --------------------------------
 -- Local function definitions --
 --------------------------------
@@ -55,13 +68,11 @@ local function buffer() local m={slice={}}; return function(x) m.slice[#m.slice+
 local function fcomp( fns )
     local N = #fns
     assert( N > 0, 'There must be at least one argument.' )
-    if N == 1 then return fns[1] end
-    if N == 2 then return fns[1]( fns[2] ) end
     local fx = fns[N]
     for j = N-1,1,-1 do fx = fns[j]( fx ) end
     return fx
 end
-
+--[[
 local function comp( args )
     local N = #args
     assert( N > 0, 'There must be at least one argument.' )
@@ -69,6 +80,14 @@ local function comp( args )
     if N == 2 then assert( type(args[2]) ~= 'function', 'Last argument cannot be a function.'); return args[1]( args[2] ), args[2] end -- or can it be?
     local fx = fcomp( args )
     return fx, args[N]
+end
+--]]
+local function comp( args )
+    local N = #args
+    assert( N > 0, 'There must be at least one argument.' )
+    if N == 1 then assert( type(args[1]) == 'function', 'One argument given, it must be a function.'); return args[1], nil end
+    local fx = fcomp( args )
+    return fx, ((type(args[N]) ~= 'function') and args[N] or nil)
 end
 
 local function xcomp( args )
