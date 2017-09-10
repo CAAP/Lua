@@ -49,8 +49,10 @@ static int next (lua_State *L, sqlite3_stmt *pStmt) {
 	    for (k=0; k<nCol; k++) {
 		const char *tmps = (char *)sqlite3_column_text(pStmt, k);
 		if (tmps && strlen( tmps ) > 0) {
-		    lua_pushstring(L, tmps);
-		    if ( lua_isnumber(L, -1) ) { double x = lua_tonumber(L, -1); lua_pop(L, 1); lua_pushnumber(L, x); }
+		    if (!lua_stringtonumber(L, tmps)) // if conversion succeds then push Num/Int and returns non-zero value
+			lua_pushstring(L, tmps); // else push string
+//		    lua_pushstring(L, tmps);
+//		    if ( lua_isnumber(L, -1) ) { double x = lua_tonumber(L, -1); lua_pop(L, 1); lua_pushnumber(L, x); }
 		    lua_setfield(L, -2, sqlite3_column_name(pStmt, k));
 		}
 	    }

@@ -1,5 +1,5 @@
 #include <opencv2/opencv.hpp>
-#include <gdcm-2.4/gdcmPixelFormat.h>
+#include <gdcm-2.6/gdcmPixelFormat.h>
 
 #include <vector>
 
@@ -67,7 +67,7 @@ static int zeros(lua_State *L, int rows, int cols) {
 static int ones(lua_State *L, int rows, int cols) {
     int factor = 1;
     if (lua_gettop(L) > 1)
-	    factor = luaL_checkint(L, 2);
+	    factor = luaL_checkinteger(L, 2);
     cv::Mat ret = cv::Mat::ones(rows, cols, CV_8UC1) * factor;
     cv::Mat **um = newmat(L);
     *um = new cv::Mat(ret);
@@ -92,13 +92,13 @@ static void correctFormat(bool tobyte, cv::Mat *m, cv::Mat &target) {
 
 static const char* depth2str(int x) {
     switch (x) {
-	case CV_8U : return "8U";
-	case CV_8S : return "8S";
-	case CV_16U : return "16U";
-	case CV_16S: return "16S";
-	case CV_32S: return "32S";
-	case CV_32F: return "32F";
-	case CV_64F: return "64F";
+	case CV_8U : return "8U"; //uchar
+	case CV_8S : return "8S"; //char
+	case CV_16U : return "16U"; //ushort
+	case CV_16S: return "16S"; //short
+	case CV_32S: return "32S"; //int
+	case CV_32F: return "32F"; //float
+	case CV_64F: return "64F"; //double
 	default: return NULL;
     }
 }
@@ -106,6 +106,41 @@ static const char* depth2str(int x) {
 /* ******************************** */
 
 /* ************* MAT ** ********** */
+
+static int fromTable(lua_State *L) {
+    int rows = luaL_checkinteger(L, 1);
+    int cols = luaL_checkinteger(L, 2);
+    int type = (luaL_checkstring(L, 3)[0] == 'd') ? CV_64F : CV_32S;
+    luaL_checktype(L, 4, LUA_TTABLE);
+    int N = luaL_len(L, 4);
+
+    if (N != (rows*cols))
+	luaL_error(L, "Number of (rows x cols) not equal to length of table.");
+
+    cv::Mat ret;
+
+    if (type == CV_64F) {
+	double *data = (double *)lua_newuserdata(L, N*sizeof(double));
+	for (unsigned int k = 0; k < N; k++) {
+	    lua_rawgeti(L, 4, k+1);
+	    data[k] = lua_tonumber(L, -1);
+	    lua_pop(L, 1);
+	}
+	ret = cv::Mat(rows, cols, type, (void *)data);
+    } else {
+	int *data = (int *)lua_newuserdata(L, N*sizeof(int));
+	for (unsigned int k = 0; k < N; k++) {
+	    lua_rawgeti(L, 4, k+1);
+	    data[k] = lua_tointeger(L, -1);
+	    lua_pop(L, 1);
+	}
+	ret = cv::Mat(rows, cols, type, (void *)data);
+    }
+
+    cv::Mat **m = newmat(L);
+    *m = new cv::Mat(ret);
+    return 1;
+}
 
 static int rotationMatrix(lua_State *L) {
     float x = luaL_checknumber(L, 1);
@@ -146,18 +181,24 @@ static int fromGDCM(lua_State *L) {
     lua_getuservalue(L, 1);
     const unsigned int cols = getfield(L, "dimX");
     const unsigned int rows = getfield(L, "dimY");
-    const unsigned int type = cvtype( getfield(L, "type") );
-    const int intercept = getfield(L, "intercept");
+    unsigned int type = cvtype( getfield(L, "type") );
+    const int intercept = (int)getfield(L, "intercept");
 
-    if (type == CV_16U) { type == CV_16S; }
+    if (type == CV_16U) { type = CV_16S; }
 
     cv::Mat m = cv::Mat(rows, cols, type, (void *)udata);
     
     if ( m.empty() )
 	    luaL_error(L, "Cannot read image from GDCM data buffer.");
 
-    if ( intercept != 0 )
+    if ( intercept )
 	    m = m + intercept;
+
+    // XXX Add Slope Adjustments
+/*    
+    if ( slope )
+	;
+*/
 
     cv::Mat **um = newmat(L);
 //    if (type == CV_16U) { m.convertTo( m, CV_16S ); }
@@ -166,6 +207,10 @@ static int fromGDCM(lua_State *L) {
 
     return 1;
 }
+
+
+//////////////////////////////
+
 
 static int mat2zeros(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
@@ -179,7 +224,7 @@ static int mat2ones(lua_State *L) {
 
 static int applyLUT(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
-    check81(L, m);
+    check81(L, m); // Only char images!!!
     luaL_checktype(L, 2, LUA_TTABLE);
     int k = luaL_len(L, 2);
     if (k != 256)
@@ -189,8 +234,8 @@ static int applyLUT(lua_State *L) {
 	lut[k] = geti(L, k+1);
     cv::Mat dst = cv::Mat::zeros( m->size(), CV_8UC1 );
     uchar *tgt = dst.data, *org = m->data;
-    for (k = 0; k < (m->rows * m->cols); k++)
-	tgt[k] = lut[org[k]];
+    for (unsigned int k = 0; k < (m->rows * m->cols); k++)
+	tgt[k] = lut[org[k]]; // alt: *tgt++ = lut[*org++];
     cv::Mat **um = newmat(L);
     *um = new cv::Mat(dst);
     return 1;
@@ -328,11 +373,54 @@ static int stdev(lua_State *L) {
     return 2;
 }
 
+//////// PCA //////
+
+static int doPCA(lua_State *L) {
+    cv::Mat data, *m = checkmat(L, 1);
+    int asrows = 1, nargs = lua_gettop(L);
+    double var = 0.9;
+
+    //if not orientation given then default to ROW
+    if (nargs > 2)
+	asrows = (luaL_checkstring(L, 3)[0] == 'c') ? 0 : 1;
+
+    //if not # of components OR variance given then default to 2 components
+    if (nargs > 3)
+	var = luaL_checknumber(L, 4);
+
+    if ((var <= 0) || (var > 1))
+	luaL_error(L, "Variance cannot be greater than 1 nor less than 0.");
+
+    // if not type float then convert to float
+    if (m->depth() < CV_32F)
+	m->convertTo(data, CV_32F);
+    else
+	data = *m;
+
+    //if not mean value given then compute it
+    if (nargs > 1) {
+        cv::Mat *mean = checkmat(L, 2);
+	cv::PCA pca(data, *mean, (asrows ? cv::PCA::DATA_AS_ROW : cv::PCA::DATA_AS_COL), var);
+    }
+
+    cv::PCA pca(data, cv::noArray(), (asrows ? cv::PCA::DATA_AS_ROW : cv::PCA::DATA_AS_COL), var);
+
+    cv::Mat **eigvals = newmat(L);
+    *eigvals = new cv::Mat(pca.eigenvalues);
+    cv::Mat **eigvecs = newmat(L);
+    *eigvecs = new cv::Mat(pca.eigenvectors);
+    cv::Mat **mean = newmat(L);
+    *mean = new cv::Mat(pca.mean);
+    return 3;
+}
+
+//////////////
+
 static int median(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
     int ksize = 3;
     if (lua_gettop(L) > 1)
-	    ksize = luaL_checkint(L, 2);
+	    ksize = luaL_checkinteger(L, 2);
     if ((ksize%2 == 0) | (ksize < 2))
 	    luaL_error(L, "Aperture size must be odd and greater than 1.");
     if ((ksize > 5) & (m->depth() != CV_8U))
@@ -358,7 +446,7 @@ static int morphology(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
     const char opt1 = luaL_checkstring(L, 2)[0];
     const char opt2 = luaL_checkstring(L, 3)[0];
-    int iter = luaL_checkint(L, 4);
+    int iter = luaL_checkinteger(L, 4);
     int shape;
     switch(opt2) {
 	case 'E': shape = cv::MORPH_ELLIPSE; break;
@@ -386,7 +474,7 @@ static int laplacian(lua_State *L) {
 
     int ksize = 1;
     if (lua_gettop(L)> 1) {
-	ksize = luaL_checkint(L, 2);
+	ksize = luaL_checkinteger(L, 2);
     }
     if ((ksize > 31) | (ksize%2 == 0))
 	    luaL_error(L, "Kernel size must be odd and less than 31.");
@@ -411,7 +499,7 @@ static int sobel(lua_State *L) {
     }
 
     if (lua_gettop(L) > 2) {
-	    ksize = luaL_checkint(L, 3);
+	    ksize = luaL_checkinteger(L, 3);
     }
 
     cv::Mat ret;
@@ -432,7 +520,7 @@ static int canny(lua_State *L) {
     double thresh2  = luaL_checknumber(L, 3);
     int aperture = 3;
     if (lua_gettop(L) > 3)
-	    aperture = luaL_checkint(L, 4);
+	    aperture = luaL_checkinteger(L, 4);
     if (thresh1 == thresh2)
 	    luaL_error(L, "Threshold1 cannot be equal to threshold2.");
     if ((aperture < 1) | (aperture > 7) | (aperture%2 == 0))
@@ -497,6 +585,7 @@ static int inRange(lua_State *L) {
     return 1;
 }
 
+// what about histogram object predefined in OpenCV XXX?
 static int getHistogram(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
 
@@ -626,7 +715,7 @@ static int convert2byte(lua_State *L) {
 static int convert2float(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
     cv::Mat dst;
-    m->convertTo(dst, CV_32S);
+    m->convertTo(dst, CV_32F);
     cv::Mat **um = newmat(L);
     *um = new cv::Mat(dst);
     return 1;
@@ -674,6 +763,42 @@ static int mat2len(lua_State *L) {
 static int mat2str(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
     lua_pushfstring(L, "ocvImage{ rows = %d, cols = %d, depth = '%s', channels = %d }", m->rows, m->cols, depth2str(m->depth()), m->channels());
+    return 1;
+}
+
+static int mat2table(lua_State *L) {
+    cv::Mat *m = checkmat(L, 1);
+    unsigned int rows = m->rows, cols = m->cols;
+    int depth = m->depth();
+
+    if (m->isContinuous()) { cols = cols * rows; rows = 1; }
+
+    unsigned int k = 1;
+    cv::Mat ret;
+    lua_newtable(L);
+
+    if (depth == CV_32F || depth == CV_64F) {
+	m->convertTo(ret, CV_64F); // convert to Double
+	double *p;
+	for (unsigned int i = 0; i < rows; i++) {
+	    p = ret.ptr<double>(i);
+	    for (unsigned int j = 0; j < cols; j++) {
+		lua_pushnumber(L, p[j]); // push Double
+		lua_rawseti(L, 2, k++);
+	    }
+	}
+    } else {
+	m->convertTo(ret, CV_32S); // convert to Int
+	int *p;
+	for (unsigned int i = 0; i < rows; i++) {
+	    p = ret.ptr<int>(i);
+	    for (unsigned int j = 0; j < cols; j++) {
+		lua_pushinteger(L, p[j]); // push Int
+		lua_rawseti(L, 2, k++);
+	    }
+	}
+    }
+
     return 1;
 }
 
@@ -831,11 +956,11 @@ static int grid(lua_State *L) {
     cv::Rect *r = checkrect(L, 1);
     int dx, dy;
     if (lua_gettop(L) > 2) {
-	    dx = luaL_checkint(L, 2);
-	    dy = luaL_checkint(L, 3);
+	    dx = luaL_checkinteger(L, 2);
+	    dy = luaL_checkinteger(L, 3);
     }
     else if (lua_gettop(L) > 1) {
-	    dx = luaL_checkint(L, 2);
+	    dx = luaL_checkinteger(L, 2);
 	    dy = dx;
     }
     lua_newtable(L);
@@ -1080,6 +1205,8 @@ static const struct luaL_Reg cv_funcs[] = {
   {"openDCM", fromGDCM},
   {"rect", newRect},
   {"rotation", rotationMatrix},
+  {"PCA", doPCA},
+  {"fromTable", fromTable},
   {NULL, NULL}
 };
 
@@ -1116,6 +1243,7 @@ static const struct luaL_Reg mat_meths[] = {
   {"__tostring", mat2str},
   {"__gc", release},
   {"__len", mat2len},
+  {"totable", mat2table},
 //  {"show", showImage},
   {"zeros", mat2zeros},
   {"ones", mat2ones},

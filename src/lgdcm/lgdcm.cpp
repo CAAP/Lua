@@ -44,7 +44,7 @@ static void gettag(lua_State *L, unsigned int *hexs) {
 		luaL_error(L, "A Tag needs two numbers.");
 	for (j=0; j<2;) {
 		lua_rawgeti(L, -1, j+1);
-		hexs[j++] = lua_tounsigned(L, -1);
+		hexs[j++] = ((unsigned int)lua_tointeger(L, -1)); // lua_tounsigned
 		lua_pop(L, 1);
 	}
 }
@@ -61,10 +61,13 @@ static void getIntercept(lua_State *L, const char *filename) {
 	if ( ds.FindDataElement( intercept ) ) {
 		ds.GetDataElement( intercept ).GetValue().Print( strm );
 	}
-	lua_pushstring(L, strm.str().c_str());
-	lua_pushnumber(L, lua_tonumber(L, -1));
-	lua_remove(L, -2);
+	if (!lua_stringtonumber(L, strm.str().c_str()))
+	    lua_pushinteger(L, 0);
+/*	lua_pushstring(L, strm.str().c_str());
+	lua_pushinteger(L, lua_tointeger(L, -1)); // lua_pushnumber ... lua_tonumber
+	lua_remove(L, -2); */
 	lua_setfield(L, -2, "intercept");
+
 }
 
 static int initializeXML() {
@@ -124,14 +127,14 @@ static int imageReader(lua_State *L) {
     lua_pushinteger(L, dimension[1]);
     lua_setfield(L, -2, "dimY");
 
-    getIntercept(L, filename);
+    getIntercept(L, filename); // add intercept field with initial value or zero
 
     lua_pushinteger(L, stype);
     lua_setfield(L, -2, "type");
     lua_pushfstring(L, "GDCM-Image{file: %s, dims:{x: %d, y: %d}, pixel: %s, intercept: %f}", filename, dimension[0], dimension[1], pixel2str(stype), intercept);
     lua_setfield(L, -2, "asstring");
-    lua_setuservalue(L, -2);
-    return 1;
+    lua_setuservalue(L, -2); // append upvalue to userdatum
+    return 1; // returns userdatum: caap.gdcm.image
 }
 
 static int deltax(lua_State *L) {
@@ -227,11 +230,14 @@ static int readData(lua_State *L) {
 		s = sf.ToString( ds.GetDataElement( tag ).GetTag() );
 	    else
 		w++; // missing value
-	    lua_pushstring(L, s.c_str());
+	    // ADD value/empty string
+	    if (!lua_stringtonumber(L, s.c_str()))
+		lua_pushstring(L, s.c_str());
+/*	    lua_pushstring(L, s.c_str());
 	    if ( lua_isnumber(L, -1) == 1 ) {
 		lua_pushnumber(L, lua_tonumber(L, -1));
 		lua_remove(L, -2);
-	    }
+	    } */
 	    lua_rawseti(L, -2, k+1);
 	}
 // mising values could be added to TABLE
@@ -341,7 +347,10 @@ static int scanner(lua_State *L) {
 		    lua_pushstring(L, fname);
 		    lua_rawseti(L, -2, 1);
 		    for (k=0; k<N; k++) {
-			    lua_pushstring(L, scn.GetValue(fname, tags[k]));
+			    const char *value = scn.GetValue(fname, tags[k]); // maybe change to Mappings as suggested in Doc!
+			    if(!lua_stringtonumber(L, value))
+				lua_pushstring(L, (value ? value : ""));
+/*			    lua_pushstring(L, scn.GetValue(fname, tags[k]));
 			    if (lua_isnumber(L, -1) == 1) {
 				    lua_pushnumber(L, lua_tonumber(L, -1));
 				    lua_remove(L, -2);
@@ -349,7 +358,7 @@ static int scanner(lua_State *L) {
 			    if (lua_isnoneornil(L, -1) == 1) {
 				    lua_pop(L, 1);
 				    lua_pushstring(L, "");
-			    }
+			    } */
 			    lua_rawseti(L, -2, k+2);
 		    }
 		    lua_rawseti(L, -2, m++); 

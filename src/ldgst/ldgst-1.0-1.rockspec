@@ -19,8 +19,8 @@ build = {
 	ldgst = {
 	    sources = {"ldgst.c"},
 	    libraries = {"crypto"},
-	    incdirs = {"$(OPENSSL)/include"},
-	    libdirs = {"$(OPENSSL)/lib"},
+--	    incdirs = {"$(OPENSSL)/include"},
+--	    libdirs = {"$(OPENSSL)/lib"},
 	}
     }
 }
