@@ -137,15 +137,15 @@ static int imageReader(lua_State *L) {
     return 1; // returns userdatum: caap.gdcm.image
 }
 
-static int deltax(lua_State *L) {
+static int dimx(lua_State *L) {
     lua_getuservalue(L, 1);
-    lua_getfield(L, -1, "deltaX");
+    lua_getfield(L, -1, "dimX");
     return 1;
 }
 
-static int deltay(lua_State *L) {
+static int dimy(lua_State *L) {
     lua_getuservalue(L, 1);
-    lua_getfield(L, -1, "deltaY");
+    lua_getfield(L, -1, "dimY");
     return 1;
 }
 
@@ -381,8 +381,8 @@ static const struct luaL_Reg dcm_funcs[] = {
 static const struct luaL_Reg img_meths[] = {
     {"__tostring", img2string},
     {"__len", img_len},
-    {"x", deltax},
-    {"y", deltay},
+    {"x", dimx},
+    {"y", dimy},
     {"intercept", intercept},
     {NULL, NULL}
 };

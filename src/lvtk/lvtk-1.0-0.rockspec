@@ -20,7 +20,7 @@ build = {
 	    sources = {"lvtk.cpp"},
 	    incdirs = {"$(VTK)/include/vtk-8.0"},
 	    libdirs = {"$(VTK)/lib" },
-	    libraries = {"vtkImagingCore-8.0", "vtkIOCore-8.0", "vtkIOImage-8.0", "vtkIOXML-8.0", "vtkFiltersImaging-8.0"},
+	    libraries = {"vtkImagingCore-8.0", "vtkIOCore-8.0", "vtkIOImage-8.0", "vtkIOXML-8.0", "vtkFiltersImaging-8.0", "vtkImagingStatistics-8.0", "vtkImagingStencil-8.0"},
 	}
     }
 }
