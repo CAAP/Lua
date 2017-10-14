@@ -1,0 +1,1 @@
+/usr/bin/clang  -fPIC -fPIC -Wall -fPIC -shared -Wl,-soname,libluasql.so -o libluasql.so CMakeFiles/luasql.dir/lsql.c.o /home/carlos/Lua/lib/liblua.a /home/carlos/Sqlite/lib/libsqlite3.so -Wl,-rpath,/home/carlos/Sqlite/lib: 

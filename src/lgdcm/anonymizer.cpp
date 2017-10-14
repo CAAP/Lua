@@ -1,14 +1,14 @@
-#include <gdcm-2.6/gdcmGlobal.h>
-#include <gdcm-2.6/gdcmStringFilter.h>
-#include <gdcm-2.6/gdcmSequenceOfItems.h>
-#include <gdcm-2.6/gdcmExplicitDataElement.h>
-#include <gdcm-2.6/gdcmDataSetHelper.h>
-#include <gdcm-2.6/gdcmUIDGenerator.h>
-#include <gdcm-2.6/gdcmAttribute.h>
-#include <gdcm-2.6/gdcmDummyValueGenerator.h>
-#include <gdcm-2.6/gdcmDicts.h>
-#include <gdcm-2.6/gdcmType.h>
-#include <gdcm-2.6/gdcmDefs.h>
+#include <gdcm-2.9/gdcmGlobal.h>
+#include <gdcm-2.9/gdcmStringFilter.h>
+#include <gdcm-2.9/gdcmSequenceOfItems.h>
+#include <gdcm-2.9/gdcmExplicitDataElement.h>
+#include <gdcm-2.9/gdcmDataSetHelper.h>
+#include <gdcm-2.9/gdcmUIDGenerator.h>
+#include <gdcm-2.9/gdcmAttribute.h>
+#include <gdcm-2.9/gdcmDummyValueGenerator.h>
+#include <gdcm-2.9/gdcmDicts.h>
+#include <gdcm-2.9/gdcmType.h>
+#include <gdcm-2.9/gdcmDefs.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,9 +86,10 @@ static int isSpecial ( gdcm::Tag const &tag ) {
     return std::binary_search( SpecialTypeTags, SpecialTypeTags + nSIDs, tag );
 }
 
-//static int removeTag( gdcm::Tag const &t, gdcm::DataSet const &ds ) {
-//    return ds.FindDataElement( t ) && ds.Remove( t );
-//}
+/*
+static int removeTag( gdcm::Tag const &t, gdcm::DataSet const &ds ) {
+    return ds.FindDataElement( t ) && ds.Remove( t );
+} */
 
 static int replaceData( gdcm::Tag const &t, gdcm::DataSet &ds, const gdcm::DictEntry &entry, char const *str, gdcm::VL::Type const size ) {
     gdcm::DataElement de ( t );
@@ -147,9 +148,10 @@ static int replaceTag( gdcm::Tag const &t, const char *value, gdcm::DataSet &ds 
     return lreplace( t, value, len, ds );
 }
 
+/* UNUSED fun XXX
 static int empty( gdcm::Tag const &t, gdcm::DataSet &ds ) {
     return lreplace(t, "", 0, ds);
-}
+} */
 
 static int canEmpty( gdcm::Tag const &tag, const gdcm::Type type ) {
     switch( type ) {
@@ -174,15 +176,15 @@ static int basicProtection ( gdcm::Tag const &tag, const gdcm::Type type, gdcm::
 
     gdcm::UIDGenerator uid;
     if ( isVRUI(tag) ) {
-	const gdcm::ByteValue *bv;
-	const char *oldUID = ( !de.IsEmpty() && (bv = de.GetByteValue()) ) ? bv->GetPointer() : "";
-	// anonymize UID XXX
+//	const gdcm::ByteValue *bv; // NOT USED XXX
+//	const char *oldUID = ( !de.IsEmpty() && (bv = de.GetByteValue()) ) ? bv->GetPointer() : ""; // NOT USED XXX
+	// anonymize UID
 	const char *newUID = "DUMMY-UID"; //uid.Generate();
 	de.SetByteValue( newUID, (uint32_t)strlen(newUID) );
     } else {
 	const char *dummy = "DUMMY";
 	//dummy = ( dummy = gdcm::DummyValueGenerator::Generate( "" ) )  "";
-	// anonymize non-UID XXX
+	// anonymize non-UID
 	de.SetByteValue( dummy, (uint32_t)strlen(dummy) );
     }
     ds.Replace( de );
@@ -252,7 +254,6 @@ void getAttributes( gdcm::Tag *ptag) {
 	*ptag++ = *ptr;
     }
 }
-
 
 #ifdef __cplusplus
 }

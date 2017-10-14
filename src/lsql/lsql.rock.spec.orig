@@ -1,0 +1,27 @@
+package = "LSQL"
+version = "3.0-1"
+
+source = {
+    url = "..."
+}
+
+description = {
+    summary = "Sqlite wrapper"
+}
+
+dependencies = {
+    "lua >= 5.2"
+}
+
+build = {
+    type = "cmake",
+    modules = {
+	lsql = {
+            sources = { "lsql.c" },
+	    incdirs = {"$(SQL)/include"},
+	    libdirs = {"$(SQL)/lib" },
+	    libraries = { "sqlite3" },
+	}
+    }
+}
+

@@ -53,7 +53,7 @@ static int stat_pnorm (lua_State *L) {
   lua_Number x = luaL_checknumber(L, 1);
   lua_Number mean = luaL_optnumber(L, 2, 0);
   lua_Number sd = luaL_optnumber(L, 3, 1);
-  lua_Number p, q, bound;
+  lua_Number p = 0.0, q, bound;
   int which = 1;
   int status;
   check_norm(L, 1, x, sd);
@@ -111,7 +111,7 @@ static int stat_pt (lua_State *L) {
   /* stack should contain t and df */
   lua_Number t = luaL_checknumber(L, 1);
   lua_Number df = luaL_checknumber(L, 2);
-  lua_Number p, q, bound;
+  lua_Number p = 0, q, bound;
   int which = 1;
   int status;
   check_t(L, 1, t, df);

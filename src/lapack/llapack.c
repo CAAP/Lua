@@ -159,7 +159,7 @@ static int fromTable(lua_State *L) {
 static int fromArray(lua_State *L) {
     luaL_checktype(L, 1, LUA_TUSERDATA);
     const lapack_int M = luaL_checkinteger(L, 2);
-    const k = lua_gettop(L);
+    const int k = lua_gettop(L);
 
     lua_pushvalue(L, 1);
 
@@ -203,6 +203,7 @@ static int vec2gc(lua_State *L) {
 // 	'I', 'i' infinity norm, maximum row sum
 // 	'F', 'f' Froenius norm, SR-SSQ 
 // https://software.intel.com/en-us/mkl-developer-reference-c-lange
+/*
 static int normSym(lua_State *L) {
     const double *mat = checkmatrix(L, 1);
     const char n = luaL_checkstring(L, 2)[0];
@@ -228,7 +229,7 @@ static int eigenvalue(lua_State *L) {
 
     char jobz = vecs ? 'V' : 'N';
     char range = 'A';
-    lapack_int i1, i2, *m = &N;
+    lapack_int i1 = 0, i2 = 0, *m = &N;
     if (lua_gettop(L) == 4) {
 	range = 'I';
 	i1 = luaL_checkinteger(L, 3);
@@ -247,6 +248,7 @@ static int eigenvalue(lua_State *L) {
 
     return 2;
 }
+*/
 
 //////// MATRIX //////////
 

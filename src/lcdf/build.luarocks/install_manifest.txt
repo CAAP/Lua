@@ -1,0 +1,1 @@
+/home/carlos/Lua/lib/lua/5.3/lcdf.so

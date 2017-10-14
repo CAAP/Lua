@@ -1,0 +1,1 @@
+/usr/bin/clang++  -fPIC -O2 -fPIC -Wall -pedantic  -shared -Wl,-soname,lgdcm.so -o lgdcm.so CMakeFiles/lgdcm.dir/anonymizer.cpp.o CMakeFiles/lgdcm.dir/lgdcm.cpp.o /home/carlos/Lua/lib/liblua.a /home/carlos/GDCM/lib/libgdcmCommon.so -Wl,-rpath,/home/carlos/GDCM/lib: 

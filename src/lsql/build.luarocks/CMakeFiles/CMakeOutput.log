@@ -1,0 +1,182 @@
+The system is: Linux - 3.10.0-514.26.1.el7.x86_64 - x86_64
+Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+Compiler: /usr/bin/clang 
+Build flags: -fPIC;-Wall
+Id flags: 
+
+The output was:
+0
+
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.out"
+
+The C compiler identification is Clang, found in "/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/3.6.3/CompilerIdC/a.out"
+
+Determining if the C compiler works passed with the following output:
+Change Dir: /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_485aa/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_485aa.dir/build.make CMakeFiles/cmTC_485aa.dir/build
+gmake[1]: Entering directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_485aa.dir/testCCompiler.c.o
+/usr/bin/clang    -fPIC -Wall    -o CMakeFiles/cmTC_485aa.dir/testCCompiler.c.o   -c /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp/testCCompiler.c
+Linking C executable cmTC_485aa
+/usr/bin/cmake3 -E cmake_link_script CMakeFiles/cmTC_485aa.dir/link.txt --verbose=1
+/usr/bin/clang  -fPIC -Wall     CMakeFiles/cmTC_485aa.dir/testCCompiler.c.o  -o cmTC_485aa -rdynamic 
+gmake[1]: Leaving directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+
+
+Detecting C compiler ABI info compiled with the following output:
+Change Dir: /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_dc758/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_dc758.dir/build.make CMakeFiles/cmTC_dc758.dir/build
+gmake[1]: Entering directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o
+/usr/bin/clang    -fPIC -Wall    -o CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o   -c /usr/share/cmake3/Modules/CMakeCCompilerABI.c
+Linking C executable cmTC_dc758
+/usr/bin/cmake3 -E cmake_link_script CMakeFiles/cmTC_dc758.dir/link.txt --verbose=1
+/usr/bin/clang  -fPIC -Wall    -v CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o  -o cmTC_dc758 -rdynamic  
+clang version 3.4.2 (tags/RELEASE_34/dot2-final)
+Target: x86_64-redhat-linux-gnu
+Thread model: posix
+Found candidate GCC installation: /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.2
+Found candidate GCC installation: /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5
+Found candidate GCC installation: /usr/lib/gcc/x86_64-redhat-linux/4.8.2
+Found candidate GCC installation: /usr/lib/gcc/x86_64-redhat-linux/4.8.5
+Selected GCC installation: /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5
+ "/usr/bin/ld" -export-dynamic --hash-style=gnu --no-add-needed --build-id --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_dc758 /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crt1.o /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crti.o /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/crtbegin.o -L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5 -L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../.. -L/lib -L/usr/lib CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o -lgcc --as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/crtend.o /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crtn.o
+gmake[1]: Leaving directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+
+
+Parsed C implicit link information from above output:
+  link line regex: [^( *|.*[/\])(ld|([^/\]+-)?ld|collect2)[^/\]*( |$)]
+  ignore line: [Change Dir: /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp]
+  ignore line: []
+  ignore line: [Run Build Command:"/usr/bin/gmake" "cmTC_dc758/fast"]
+  ignore line: [/usr/bin/gmake -f CMakeFiles/cmTC_dc758.dir/build.make CMakeFiles/cmTC_dc758.dir/build]
+  ignore line: [gmake[1]: Entering directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp']
+  ignore line: [Building C object CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o]
+  ignore line: [/usr/bin/clang    -fPIC -Wall    -o CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o   -c /usr/share/cmake3/Modules/CMakeCCompilerABI.c]
+  ignore line: [Linking C executable cmTC_dc758]
+  ignore line: [/usr/bin/cmake3 -E cmake_link_script CMakeFiles/cmTC_dc758.dir/link.txt --verbose=1]
+  ignore line: [/usr/bin/clang  -fPIC -Wall    -v CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o  -o cmTC_dc758 -rdynamic  ]
+  ignore line: [clang version 3.4.2 (tags/RELEASE_34/dot2-final)]
+  ignore line: [Target: x86_64-redhat-linux-gnu]
+  ignore line: [Thread model: posix]
+  ignore line: [Found candidate GCC installation: /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.2]
+  ignore line: [Found candidate GCC installation: /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5]
+  ignore line: [Found candidate GCC installation: /usr/lib/gcc/x86_64-redhat-linux/4.8.2]
+  ignore line: [Found candidate GCC installation: /usr/lib/gcc/x86_64-redhat-linux/4.8.5]
+  ignore line: [Selected GCC installation: /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5]
+  link line: [ "/usr/bin/ld" -export-dynamic --hash-style=gnu --no-add-needed --build-id --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_dc758 /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crt1.o /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crti.o /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/crtbegin.o -L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5 -L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../.. -L/lib -L/usr/lib CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o -lgcc --as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/crtend.o /usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crtn.o]
+    arg [/usr/bin/ld] ==> ignore
+    arg [-export-dynamic] ==> ignore
+    arg [--hash-style=gnu] ==> ignore
+    arg [--no-add-needed] ==> ignore
+    arg [--build-id] ==> ignore
+    arg [--eh-frame-hdr] ==> ignore
+    arg [-m] ==> ignore
+    arg [elf_x86_64] ==> ignore
+    arg [-dynamic-linker] ==> ignore
+    arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+    arg [-o] ==> ignore
+    arg [cmTC_dc758] ==> ignore
+    arg [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crt1.o] ==> ignore
+    arg [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crti.o] ==> ignore
+    arg [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/crtbegin.o] ==> ignore
+    arg [-L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5] ==> dir [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5]
+    arg [-L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64] ==> dir [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64]
+    arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+    arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+    arg [-L/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../..] ==> dir [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../..]
+    arg [-L/lib] ==> dir [/lib]
+    arg [-L/usr/lib] ==> dir [/usr/lib]
+    arg [CMakeFiles/cmTC_dc758.dir/CMakeCCompilerABI.c.o] ==> ignore
+    arg [-lgcc] ==> lib [gcc]
+    arg [--as-needed] ==> ignore
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [--no-as-needed] ==> ignore
+    arg [-lc] ==> lib [c]
+    arg [-lgcc] ==> lib [gcc]
+    arg [--as-needed] ==> ignore
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [--no-as-needed] ==> ignore
+    arg [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/crtend.o] ==> ignore
+    arg [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64/crtn.o] ==> ignore
+  remove lib [gcc]
+  remove lib [gcc_s]
+  remove lib [gcc]
+  remove lib [gcc_s]
+  collapse library dir [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5] ==> [/usr/lib/gcc/x86_64-redhat-linux/4.8.5]
+  collapse library dir [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../../../lib64] ==> [/usr/lib64]
+  collapse library dir [/lib/../lib64] ==> [/lib64]
+  collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+  collapse library dir [/usr/bin/../lib/gcc/x86_64-redhat-linux/4.8.5/../../..] ==> [/usr/lib]
+  collapse library dir [/lib] ==> [/lib]
+  collapse library dir [/usr/lib] ==> [/usr/lib]
+  implicit libs: [c]
+  implicit dirs: [/usr/lib/gcc/x86_64-redhat-linux/4.8.5;/usr/lib64;/lib64;/usr/lib;/lib]
+  implicit fwks: []
+
+
+
+
+Detecting C [-std=c11] compiler features compiled with the following output:
+Change Dir: /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_3a3f7/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_3a3f7.dir/build.make CMakeFiles/cmTC_3a3f7.dir/build
+gmake[1]: Entering directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_3a3f7.dir/feature_tests.c.o
+/usr/bin/clang    -fPIC -Wall    -std=c11 -o CMakeFiles/cmTC_3a3f7.dir/feature_tests.c.o   -c /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/feature_tests.c
+Linking C executable cmTC_3a3f7
+/usr/bin/cmake3 -E cmake_link_script CMakeFiles/cmTC_3a3f7.dir/link.txt --verbose=1
+/usr/bin/clang  -fPIC -Wall     CMakeFiles/cmTC_3a3f7.dir/feature_tests.c.o  -o cmTC_3a3f7 -rdynamic 
+gmake[1]: Leaving directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+
+
+    Feature record: C_FEATURE:1c_function_prototypes
+    Feature record: C_FEATURE:1c_restrict
+    Feature record: C_FEATURE:1c_static_assert
+    Feature record: C_FEATURE:1c_variadic_macros
+
+
+Detecting C [-std=c99] compiler features compiled with the following output:
+Change Dir: /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_10ce8/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_10ce8.dir/build.make CMakeFiles/cmTC_10ce8.dir/build
+gmake[1]: Entering directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_10ce8.dir/feature_tests.c.o
+/usr/bin/clang    -fPIC -Wall    -std=c99 -o CMakeFiles/cmTC_10ce8.dir/feature_tests.c.o   -c /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/feature_tests.c
+Linking C executable cmTC_10ce8
+/usr/bin/cmake3 -E cmake_link_script CMakeFiles/cmTC_10ce8.dir/link.txt --verbose=1
+/usr/bin/clang  -fPIC -Wall     CMakeFiles/cmTC_10ce8.dir/feature_tests.c.o  -o cmTC_10ce8 -rdynamic 
+gmake[1]: Leaving directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+
+
+    Feature record: C_FEATURE:1c_function_prototypes
+    Feature record: C_FEATURE:1c_restrict
+    Feature record: C_FEATURE:0c_static_assert
+    Feature record: C_FEATURE:1c_variadic_macros
+
+
+Detecting C [-std=c90] compiler features compiled with the following output:
+Change Dir: /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_35598/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_35598.dir/build.make CMakeFiles/cmTC_35598.dir/build
+gmake[1]: Entering directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_35598.dir/feature_tests.c.o
+/usr/bin/clang    -fPIC -Wall    -std=c90 -o CMakeFiles/cmTC_35598.dir/feature_tests.c.o   -c /home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/feature_tests.c
+Linking C executable cmTC_35598
+/usr/bin/cmake3 -E cmake_link_script CMakeFiles/cmTC_35598.dir/link.txt --verbose=1
+/usr/bin/clang  -fPIC -Wall     CMakeFiles/cmTC_35598.dir/feature_tests.c.o  -o cmTC_35598 -rdynamic 
+gmake[1]: Leaving directory `/home/carlos/Lua/src/lsql/build.luarocks/CMakeFiles/CMakeTmp'
+
+
+    Feature record: C_FEATURE:1c_function_prototypes
+    Feature record: C_FEATURE:0c_restrict
+    Feature record: C_FEATURE:0c_static_assert
+    Feature record: C_FEATURE:0c_variadic_macros

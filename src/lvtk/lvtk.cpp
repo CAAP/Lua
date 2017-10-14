@@ -4,7 +4,9 @@
 #include <vtkImageToImageStencil.h>
 #include <vtkImageImport.h>
 #include <vtkImageExport.h>
+#include <vtkImageShiftScale.h>
 #include <vtkImageThreshold.h>
+#include <vtkImageThresholdConnectivity.h>
 #include <vtkImageAccumulate.h>
 #include <vtkImageHistogram.h>
 #include <vtkImageHistogramStatistics.h>
@@ -206,8 +208,23 @@ static int readNII(lua_State *L) {
     reader->SetFileName( fname );
     reader->Update();
 
+//    double inter = (double)reader->GetRescaleIntercept(), slope = (double)reader->GetRescaleSlope();
+
     vtkSmartPointer<vtkImageData> **img = newimage(L);
-    *img = new vtkSmartPointer<vtkImageData>( reader->GetOutput() );
+/*    if (inter || (slope != 1.0)) {
+	vtkSmartPointer<vtkImageShiftScale> scale = vtkSmartPointer<vtkImageShiftScale>::New();
+	scale->SetInputData( reader->GetOutput() );
+	scale->SetShift( inter );
+	scale->SetScale( slope );
+	scale->ClampOverflowOn();
+	scale->Update();
+	*img = new vtkSmartPointer<vtkImageData>( scale->GetOutput() );
+
+	vtkSmartPointer<vtkNIFTIImageHeader> header = reader->GetNIFTIHeader();
+	header->SetSclInter( 0.0 ); header->SetSclSlope( 1.0 );
+	
+    } else*/
+	*img = new vtkSmartPointer<vtkImageData>( reader->GetOutput() );
     setUpvalue(L, **img);
 
     lua_getuservalue(L, -1);
@@ -335,38 +352,53 @@ static int stencil(lua_State *L) {
     return 1;
 }
 
+/*
 static int connectedThreshold(lua_State *L) {
     vtkSmartPointer<vtkImageData> img, *pi = checkimage(L, 1);
     img = *pi;
 
     vtkSmartPointer<vtkImageThresholdConnectivity> conn = vtkSmartPointer<vtkImageThresholdConnectivity>::New();
     conn->SetInputData( img );
-:qa
+
+    conn->SetNeighborhoodRadius();
+
+    conn->Update();
+
+    conn->GetOutput();
 
 }
+*/
 
 // FALTA AGREGAR
 static int threshold(lua_State *L) {
     vtkSmartPointer<vtkImageData> img, *pi = checkimage(L, 1);
     img = *pi;
 
-    double lower = luaL_checknumber(L, 2);
+    const char thre = luaL_checkstring(L, 2)[0];
+
+    double low, upp;
+//    double lower = luaL_checknumber(L, 2);
 //    double upper = luaL_checknumber(L, 3);
 
     vtkSmartPointer<vtkImageThreshold> threshold = vtkSmartPointer<vtkImageThreshold>::New();
     threshold->SetInputData( img );
 
-//    threshold->ThresholdByUpper( upper );
-    threshold->ThresholdByLower( lower );
-//    threshold->ThresholdBetween(lower, upper);
-
     threshold->ReplaceInOn(); // Replace the pixel in range with InValue
     threshold->SetInValue(0);
-/*
-    threshold->ReplaceOutOn(); // Replace the pixel out of range with OutValue
-    threshold->SetOutValue();
-*/
+//    threshold->ReplaceOutOn(); // Replace the pixel out of range with OutValue
+//    threshold->SetOutValue();
+
+// Refactor this, already done previously by Stencil
+    switch (thre) {
+	case 'L':
+	case 'l': low = luaL_checknumber(L, 3); threshold->ThresholdByLower( low ); break;
+	case 'U':
+	case 'u': upp = luaL_checknumber(L, 3); threshold->ThresholdByUpper( upp ); break;
+	case 'B':
+	case 'b': low = luaL_checknumber(L, 3); upp = luaL_checknumber(L, 4); threshold->ThresholdBetween( low, upp ); break;
+    }
     threshold->Update();
+
     vtkSmartPointer<vtkImageData> **img2 = newimage(L);
     *img2 = new vtkSmartPointer<vtkImageData>( threshold->GetOutput() );
     lua_getuservalue(L, 1);
@@ -570,7 +602,7 @@ static const struct luaL_Reg img_meths[] = {
   {"minmax", minmax},
   {"stats", accumulate},
   {"histo", histogram},
-  {"hstats", hstats},
+//  {"hstats", hstats},
   {"toarray", export2array},
   {"threshold", threshold},
   {"stencil", stencil},

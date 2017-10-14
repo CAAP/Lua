@@ -1,12 +1,12 @@
-#include <gdcm-2.6/gdcmImageReader.h>
-#include <gdcm-2.6/gdcmImage.h>
-#include <gdcm-2.6/gdcmGlobal.h>
-#include <gdcm-2.6/gdcmDicts.h>
-#include <gdcm-2.6/gdcmStringFilter.h>
-#include <gdcm-2.6/gdcmVR.h>
-#include <gdcm-2.6/gdcmScanner.h>
-#include <gdcm-2.6/gdcmDefs.h>
-#include <gdcm-2.6/gdcmWriter.h>
+#include <gdcm-2.9/gdcmImageReader.h>
+#include <gdcm-2.9/gdcmImage.h>
+#include <gdcm-2.9/gdcmGlobal.h>
+#include <gdcm-2.9/gdcmDicts.h>
+#include <gdcm-2.9/gdcmStringFilter.h>
+#include <gdcm-2.9/gdcmVR.h>
+#include <gdcm-2.9/gdcmScanner.h>
+#include <gdcm-2.9/gdcmDefs.h>
+#include <gdcm-2.9/gdcmWriter.h>
 
 #include <lua.hpp>
 #include <lauxlib.h>
@@ -290,7 +290,7 @@ static int deidentify( lua_State *L ) {
     gdcm::MediaStorage ms;
     ms.SetFromFile(file);
     if ( gdcm::Defs::GetIODNameFromMediaStorage(ms) == NULL ) {
-	lua_pushnil(L); lua_pushfstring(L, "The Media Storage Type of your file is not supported: %s", ms);
+	lua_pushnil(L); lua_pushfstring(L, "The Media Storage Type of your file is not supported: %s", ms.GetString());
 	return 2;
     }
 
@@ -325,7 +325,7 @@ static int scanner(lua_State *L) {
 
     int k, N = luaL_len(L, 2); // N is the number of tags
     unsigned int j[2];
-    gdcm::Tag tags[N];
+    gdcm::Tag *tags = (gdcm::Tag *)lua_newuserdata(L, N*sizeof(gdcm::Tag));
     for (k=0; k < N; k++) {
 	    lua_rawgeti(L, 2, k+1);
 	    gettag(L, j);

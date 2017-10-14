@@ -1,4 +1,4 @@
-package = "LGDCM"
+package = "LITK"
 version = "1.0-1"
 
 source = {
@@ -16,11 +16,11 @@ dependencies = {
 build = {
     type = "builtin",
     modules = {
-	lgdcm = {
-	    sources = {"anonymizer.cpp", "lgdcm.cpp"},
-	    incdirs = {"$(GDCM)/include"},
-	    libdirs = {"$(GDCM)/lib" },
-	    libraries = {"gdcmCommon", "gdcmMSFF"},
+	litk = {
+	    sources = {"litk.cpp", "itkImageIOBase.cxx", "itkImageIOFactory.cxx", "itkIOCommon.cxx", "itkLightProcessObject.cxx", "itkLightObject.cxx", "itkObject.cxx", "itkObjectFactoryBase.cxx"},
+	    incdirs = {"$(ITK)/include/ITK-4.13"},
+--	    libdirs = {"$(ITK)/lib" },
+--	    libraries = {"ITKIOImageBase-4.13", "ITKCommon-4.13", "itkdouble-conversion-4.13"},
 	}
     }
 }

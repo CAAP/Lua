@@ -1,8 +1,5 @@
 #include "itkImage.h"
-#include "itkImageIOBase.h"
-#include "itkGDCMImageIO.h"
-#include "itkGDCMSeriesFileNames.h"
-#include "itkImageFileWriter.h"
+#include "itkImageFileReader.h"
 
 #include <lua.hpp>
 #include <lauxlib.h>
@@ -11,15 +8,32 @@
 extern "C" {
 #endif
 
-#define seriesReader(PTYPE, DIMS) itk::ImageSeriesReader< itk::Image< PTYPE, DIMS > >::Pointer *reader = (itk::ImageSeriesReader< itk::Image< PTYPE, DIMS > >::Pointer *)lua_newuserdata(L, sizeof(itk::ImageSeriesReader< itk::Image< PTYPE, DIMS > >::Pointer)); luaL_getmetatable(L, "caap.itk.series"); lua_setmetatable(L, -2); *reader = itk::ImageSeriesReader< itk::Image< PTYPE, DIMS > >::New();
+static int readInfo(lua_State *L) {
+    const char *fname = luaL_checkstring(L, 1);
 
-//  luaL_getmetatable(L, "caap.itk.series"); lua_setmetatable(L, -2); *reader = itk::ImageSeriesReader< itk::Image< PTYPE, DIMS > >::New();
+    typedef itk::ImageIOBase::IOComponentType ScalarPixelType;
 
-static int newSeriesReader(lua_State *L) {
+    itk::ImageIOBase::Pointer imageIO = itk::ImageIOFactory::CreateImageIO(fname, itk::ImageIOFactory::ReadMode);
+    if (!imageIO) luaL_error(L, "Could not create ImageIO for: %s", fname);
 
-    const char *PixelType = luaL_checkstring(L, 1);
+    imageIO->SetFileName( fname );
+    imageIO->ReadImageInformation();
+    const ScalarPixelType pixelType = imageIO->GetComponentType();
+    const size_t numDims = imageIO->GetNumberOfDimensions();
+    
+    lua_newtable(L);
+    lua_pushstring(L, imageIO->GetComponentTypeAsString(pixelType).c_str());
+    lua_setfield(L, -2, "pixel");
+    lua_pushinteger(L, numDims);
+    lua_setfield(L, -2, "dimensions");
+    lua_pushinteger(L, imageIO->GetComponentSize());
+    lua_setfield(L, -2, "components");
+    lua_pushstring(L, imageIO->GetPixelTypeAsString(imageIO->GetPixelType()).c_str());
+    lua_setfield(L, -2, "image");
+    return 1;
+}
 
-
+/*
 const unsigned int Dimension
 
     // userdatum storing (SERIES) image reader Pointer
@@ -32,38 +46,25 @@ const unsigned int Dimension
 	case "FLOAT32": seriesReader(float, Dimension); // float
 	case "FLOAT64": seriesReader(double, Dimension); // double
     };
-
-    return 1;
-
-}
-
-static int series2str(lua_State *L) {
-//    cv::Mat *m = checkmat(L, 1);
-    lua_pushfstring(L, "itkSeriesReader");
     return 1;
 }
+*/
 
 //////////////////////////////
 
 static const struct luaL_Reg itk_funcs[] = {
-  {"series", newSeriesReader},
+  {"info", readInfo},
   {NULL, NULL}
 };
 
+/*
 static const struct luaL_Reg series_meths[] = {
   {"__tostring", series2str},
   {NULL, NULL}
 };
+*/
 
 int luaopen_litk (lua_State *L) {
-  luaL_newmetatable(L, "caap.itk.series");
-
-
-
-  lua_pushvalue(L, -1);
-  lua_setfield(L, -1, "__index");
-  luaL_setfuncs(L, series_meths, 0);
-
   // create the library
   luaL_newlib(L, itk_funcs);
   return 1;
@@ -72,8 +73,3 @@ int luaopen_litk (lua_State *L) {
 #ifdef __cplusplus
 }
 #endif
-
-
-
-
-
