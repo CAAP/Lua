@@ -11,8 +11,8 @@ find_library(SQL_LIBRARY
     PATHS ${SQL_LIB})
 
 find_library(LUA_LIBRARY
-    NAMES liblua.a
-    PATHS ${LUA_LIB})
+    NAMES lua53
+    PATHS ${SQL_LIB})
 
 if(LUA_LIBRARY)
     target_link_libraries(lsql ${LUA_LIBRARY})
@@ -28,5 +28,5 @@ endif(SQL_LIBRARY)
 
 set_target_properties(lsql PROPERTIES PREFIX "")
 
-install(TARGETS lsql DESTINATION "${LUA_LIB}/lua/5.3")
+install(TARGETS lsql DESTINATION ${ROCKS_LIB})
 

@@ -18,10 +18,10 @@ build = {
     variables = {
 	CMAKE_C_COMPILER   = "/usr/bin/clang",
 	CMAKE_C_FLAGS	   = "-O2 -fPIC -Wall -pedantic",
-	LUA_LIB		   = "/home/carlos/Lua/lib",
-	LUA_INC 	   = "/home/carlos/Lua/include",
-	SQL_LIB 	   = "$(SQL)/lib",
-	SQL_INC 	   = "$(SQL)/include",
+	ROCKS_LIB	   = "$HOME/Lua/lib/lua/5.3",
+	LUA_INC 	   = "/usr/local/include/lua-5.3",
+	SQL_LIB 	   = "/usr/local/lib",
+	SQL_INC 	   = "/usr/local/include",
     },
 }
 
