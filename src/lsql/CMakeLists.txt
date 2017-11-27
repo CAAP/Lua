@@ -2,17 +2,15 @@ cmake_minimum_required(VERSION 3.0)
 
 project( LUASQLITE C )
 
-include_directories(${LUA_INC} ${SQL_INC})
+include_directories(${LUA_INC})
 
 add_library(lsql SHARED lsql.c)
 
 find_library(SQL_LIBRARY
-    NAMES sqlite3
-    PATHS ${SQL_LIB})
+    NAMES sqlite3)
 
 find_library(LUA_LIBRARY
-    NAMES lua53
-    PATHS ${SQL_LIB})
+    NAMES lua53)
 
 if(LUA_LIBRARY)
     target_link_libraries(lsql ${LUA_LIBRARY})
