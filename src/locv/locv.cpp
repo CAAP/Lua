@@ -6,7 +6,6 @@
 using namespace std;
 
 #include <lua.hpp>
-#include <lauxlib.h>
 
 #ifdef __cplusplus
 extern "C" {

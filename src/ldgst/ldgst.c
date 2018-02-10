@@ -6,7 +6,13 @@
 
 static int getDigest(lua_State *L) {
     const char *dgst = lua_tostring(L, 1);
-    const char *mssg = lua_tostring(L, 2);
+    const int type = lua_type(L, 2);
+    char *mssg;
+    int N;
+    if (type == LUA_TSTRING)
+	*mssg = lua_tostring(L, 2);
+    else
+	lua_
     if (dgst == NULL || mssg == NULL) { return 0; }
 
     EVP_MD_CTX *mdctx;
@@ -15,13 +21,20 @@ static int getDigest(lua_State *L) {
     unsigned int md_len;
 
     OpenSSL_add_all_digests();
+
     md = EVP_get_digestbyname( dgst );
-// CHECK: digest was found!
+    if (md == NULL) {
+	EVP_cleanup();
+	lua_pushnil(L);
+	lua_pushfstring(L, "Unknown message digest %s\n", dgst);
+	return 2;
+    }
+
     mdctx = EVP_MD_CTX_create();
     EVP_DigestInit_ex(mdctx, md, NULL);
-
+    // digests the data in mssg string(s)
     EVP_DigestUpdate(mdctx, mssg, strlen(mssg));
-
+    // execute hashing function
     EVP_DigestFinal_ex(mdctx, md_value, &md_len);
     EVP_MD_CTX_destroy(mdctx);
 

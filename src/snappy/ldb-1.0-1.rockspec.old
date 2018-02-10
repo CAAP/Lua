@@ -1,0 +1,26 @@
+package = "LDB"
+version = "1.0-1"
+
+source = {
+    url = "..."
+}
+
+description = {
+    summary = "LevelDB wrapper"
+}
+
+dependencies = {
+    "lua >= 5.2"
+}
+
+build = {
+    type = "builtin",
+    modules = {
+	ldb = {
+            sources = {"leveldb.cc"},
+	    incdirs = {"/home/carlos/leveldb/include"},
+	    libdirs = {"/home/carlos/leveldb/lib" },
+	    libraries = { "leveldb" },
+	}
+    }
+}
