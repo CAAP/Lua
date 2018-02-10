@@ -18,8 +18,6 @@ build = {
     variables = {
 	CMAKE_C_COMPILER   = "/usr/bin/clang",
 	CMAKE_C_FLAGS	   = "-O2 -fPIC -Wall -pedantic",
-	ROCKS_LIB	   = "$ROCKS_LIB",
-	LUA_INC 	   = "$LUA_INC",
     },
 }
 

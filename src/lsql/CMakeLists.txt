@@ -2,15 +2,13 @@ cmake_minimum_required(VERSION 3.0)
 
 project( LUASQLITE C )
 
-include_directories(${LUA_INC})
-
 add_library(lsql SHARED lsql.c)
 
 find_library(SQL_LIBRARY
     NAMES sqlite3)
 
 find_library(LUA_LIBRARY
-    NAMES lua53)
+    NAMES lua)
 
 if(LUA_LIBRARY)
     target_link_libraries(lsql ${LUA_LIBRARY})
@@ -26,5 +24,5 @@ endif(SQL_LIBRARY)
 
 set_target_properties(lsql PROPERTIES PREFIX "")
 
-install(TARGETS lsql DESTINATION ${ROCKS_LIB})
+install(TARGETS lsql DESTINATION $ENV{ROCKS_LIB})
 
