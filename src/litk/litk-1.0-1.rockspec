@@ -14,14 +14,10 @@ dependencies = {
 }
 
 build = {
-    type = "builtin",
-    modules = {
-	litk = {
-	    sources = {"litk.cpp", "itkImageIOBase.cxx", "itkImageIOFactory.cxx", "itkIOCommon.cxx", "itkLightProcessObject.cxx", "itkLightObject.cxx", "itkObject.cxx", "itkObjectFactoryBase.cxx"},
-	    incdirs = {"$(ITK)/include/ITK-4.13"},
---	    libdirs = {"$(ITK)/lib" },
---	    libraries = {"ITKIOImageBase-4.13", "ITKCommon-4.13", "itkdouble-conversion-4.13"},
-	}
-    }
+    type = "cmake",
+    variables = {
+	CMAKE_CXX_COMPILER   = "/usr/bin/clang++",
+	CMAKE_CXX_FLAGS	   = "-O2 -fPIC -Wall -pedantic",
+    },
 }
 

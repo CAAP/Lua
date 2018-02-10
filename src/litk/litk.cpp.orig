@@ -1,10 +1,5 @@
-#include <itkImage.h>
-#include <itkImageFileReader.h>
-
-#include <itkGDCMImageIO.h>
-#include <itkGDCMSeriesFileNames.h>
-#include <itkImageSeriesReader.h>
-#include <itkImageFileWriter.h>
+#include "itkImage.h"
+#include "itkImageFileReader.h"
 
 #include <lua.hpp>
 #include <lauxlib.h>
@@ -12,52 +7,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
-/////  LIB //////
-
-static int image3DUShort(lua_State *L) {
-    typedef unsigned short PixelType;
-    const unsigned int     Dimension = 3;
-    typedef itk::Image< PixelType, Dimension >  ImageType;
-    typedef itk::ImageSeriesReader< ImageType > ReaderType;
-
-    return 1;
-}
-
-
-///// GDCM /////
-
-static int seriesGDCM(lua_State *L) {
-    const char *dirName = luaL_checkstring(L, 1);
-
-    typedef itk::GDCMSeriesFileNames NamesGeneratorType;
-    NamesGeneratorType::Pointer nameGenerator = NamesGeneratorType::New();
-
-    nameGenerator->SetUseSeriesDetails(true);
-    nameGenerator->AddSeriesRestriction("0008|0021");
-    nameGenerator->SetGlobalWarningDisplay(false);
-    nameGenerator->SetDirectory(dirName);
-
-    lua_newtable(L);
-
-    try {
-	typedef std::vector< std::string > SeriesIdContainer;
-	const SeriesIdContainer & seriesUID = nameGenerator->GetSeriesUIDs();
-	SeriesIdContainer::const_iterator seriesItr = seriesUID.begin();
-	SeriesIdContainer::const_iterator seriesEnd = seriesUID.end();
-
-	int k = 0;
-	while (seriesItr != seriesEnd) {
-	    lua_pushstring(L, seriesItr[k++].c_str());
-	    lua_rawseti(L, -2, k);
-	}
-    } catch (itk::ExceptionObject &ex) { luaL_error(L, "Error reading directory: %s.", dirName); }
-
-    return 1;
-}
-
-////////////////////7
 
 static int readInfo(lua_State *L) {
     const char *fname = luaL_checkstring(L, 1);
@@ -105,7 +54,6 @@ const unsigned int Dimension
 
 static const struct luaL_Reg itk_funcs[] = {
   {"info", readInfo},
-  {"fromDCM", seriesGDCM},
   {NULL, NULL}
 };
 

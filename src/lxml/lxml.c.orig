@@ -1,0 +1,28 @@
+#include "tinyxml2.h"
+#include <lua.hpp>
+
+
+static int parseDoc(lua_State *L) {
+    const char* fname = luaL_checkstring(L, 1);
+    xmlNodePtr node;
+
+    xmlDocPtr doc = xmlParseFile(fname);
+    if (doc == NULL) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "Error trying to parse document: %s\n", fname);
+	return 2;
+    }
+
+    xmlNodePtr node = xmlDocGetRootElement(doc);
+    if (node == NULL) {
+	xmlFreeDoc(doc);
+	lua_pushnil(L);
+	lua_pushfstring(L, "Empty document, cannot parse it: %s\n", fname);
+	return 2;
+    }
+
+}
+
+
+
+
