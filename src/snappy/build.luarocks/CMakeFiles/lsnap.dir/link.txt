@@ -1,1 +1,0 @@
-/usr/bin/clang++ -fPIC -O2 -fPIC -Wall -pedantic -std=c++11  -shared -o lsnap.so CMakeFiles/lsnap.dir/snappy.cc.o  -L/usr/local/lib -llua53 -lsnappy -Wl,-rpath-link,/usr/X11R6/lib:/usr/local/lib 

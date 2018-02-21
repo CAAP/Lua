@@ -6,18 +6,17 @@ source = {
 }
 
 description = {
-    summary = "ITK wrapper"
+    summary = "ITK library wrapper"
 }
 
 dependencies = {
-    "lua >= 5.1"
+    "lua >= 5.3"
 }
 
 build = {
     type = "cmake",
     variables = {
-	CMAKE_CXX_COMPILER   = "/usr/bin/clang++",
-	CMAKE_CXX_FLAGS	   = "-O2 -fPIC -Wall -pedantic",
+	CMAKE_CXX_FLAGS	     = "-O2 -fPIC -Wall -pedantic",
     },
 }
 
