@@ -1,12 +1,12 @@
-#include <gdcmImageReader.h>
-#include <gdcmImage.h>
-#include <gdcmGlobal.h>
-#include <gdcmDicts.h>
-#include <gdcmStringFilter.h>
-#include <gdcmVR.h>
-#include <gdcmScanner.h>
-#include <gdcmDefs.h>
-#include <gdcmWriter.h>
+#include <gdcm/gdcmImageReader.h>
+#include <gdcm/gdcmImage.h>
+#include <gdcm/gdcmGlobal.h>
+#include <gdcm/gdcmDicts.h>
+#include <gdcm/gdcmStringFilter.h>
+#include <gdcm/gdcmVR.h>
+#include <gdcm/gdcmScanner.h>
+#include <gdcm/gdcmDefs.h>
+#include <gdcm/gdcmWriter.h>
 
 #include <lua.hpp>
 #include <lauxlib.h>

@@ -1,14 +1,14 @@
-#include <gdcm-2.9/gdcmGlobal.h>
-#include <gdcm-2.9/gdcmStringFilter.h>
-#include <gdcm-2.9/gdcmSequenceOfItems.h>
-#include <gdcm-2.9/gdcmExplicitDataElement.h>
-#include <gdcm-2.9/gdcmDataSetHelper.h>
-#include <gdcm-2.9/gdcmUIDGenerator.h>
-#include <gdcm-2.9/gdcmAttribute.h>
-#include <gdcm-2.9/gdcmDummyValueGenerator.h>
-#include <gdcm-2.9/gdcmDicts.h>
-#include <gdcm-2.9/gdcmType.h>
-#include <gdcm-2.9/gdcmDefs.h>
+#include <gdcm/gdcmGlobal.h>
+#include <gdcm/gdcmStringFilter.h>
+#include <gdcm/gdcmSequenceOfItems.h>
+#include <gdcm/gdcmExplicitDataElement.h>
+#include <gdcm/gdcmDataSetHelper.h>
+#include <gdcm/gdcmUIDGenerator.h>
+#include <gdcm/gdcmAttribute.h>
+#include <gdcm/gdcmDummyValueGenerator.h>
+#include <gdcm/gdcmDicts.h>
+#include <gdcm/gdcmType.h>
+#include <gdcm/gdcmDefs.h>
 
 #ifdef __cplusplus
 extern "C" {
