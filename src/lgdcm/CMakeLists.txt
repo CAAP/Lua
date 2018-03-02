@@ -2,17 +2,13 @@ cmake_minimum_required(VERSION 3.0)
 
 project( LUAGDCM CXX )
 
-include_directories(${LUA_INC} ${GDCM_INC})
-
 add_library(lgdcm SHARED anonymizer.cpp lgdcm.cpp)
 
 find_library(GDCM_LIBRARY
-    NAMES gdcmCommon gdcmMSFF
-    PATHS ${GDCM_LIB})
+    NAMES gdcmCommon gdcmMSFF)
 
 find_library(LUA_LIBRARY
-    NAMES liblua.a
-    PATHS ${LUA_LIB})
+    NAMES lua)
 
 if(LUA_LIBRARY)
     target_link_libraries(lgdcm ${LUA_LIBRARY})
@@ -28,5 +24,5 @@ endif(GDCM_LIBRARY)
 
 set_target_properties(lgdcm PROPERTIES PREFIX "")
 
-install(TARGETS lgdcm DESTINATION "${LUA_LIB}/lua/5.3")
+install(TARGETS lgdcm DESTINATION $ENV{ROCKS_LIB})
 

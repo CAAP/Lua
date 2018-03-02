@@ -1,7 +1,0 @@
-/home/carlos/Lua/src/lgdcm/build.luarocks/CMakeFiles/edit_cache.dir
-/home/carlos/Lua/src/lgdcm/build.luarocks/CMakeFiles/rebuild_cache.dir
-/home/carlos/Lua/src/lgdcm/build.luarocks/CMakeFiles/install/local.dir
-/home/carlos/Lua/src/lgdcm/build.luarocks/CMakeFiles/install/strip.dir
-/home/carlos/Lua/src/lgdcm/build.luarocks/CMakeFiles/list_install_components.dir
-/home/carlos/Lua/src/lgdcm/build.luarocks/CMakeFiles/install.dir
-/home/carlos/Lua/src/lgdcm/build.luarocks/CMakeFiles/lgdcm.dir
