@@ -5,7 +5,7 @@ project( LUAGDCM CXX )
 add_library(lgdcm SHARED anonymizer.cpp lgdcm.cpp)
 
 find_library(GDCM_LIBRARY
-    NAMES gdcmCommon gdcmMSFF)
+    NAMES gdcmMSFF gdcmCommon)
 
 find_library(LUA_LIBRARY
     NAMES lua)

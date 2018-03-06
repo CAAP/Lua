@@ -79,6 +79,14 @@ static int initializeXML() {
     return 0;
 }
 
+void fromByte(lua_State *L, const gdcm::DataElement &de) {
+    const gdcm::ByteValue *bv = de.GetByteValue();
+    std::string s( bv->GetPointer(), bv->GetLength() );
+    const char *ans = s.c_str();
+    if (!lua_stringtonumber(L, ans)) // ADD value/empty string
+	lua_pushstring(L, ans);
+}
+
 //////////////////////// PUBLIC FUNCTIONS //////////////////////////
 
 // VALID TAG
@@ -92,6 +100,50 @@ static int isValidTag(lua_State *L) {
     if( entry.GetVR() & gdcm::VR::VRASCII ) { valid = 1; }
     if( entry.GetVR() & gdcm::VR::VRBINARY ) { valid = 1; }
     lua_pushboolean(L, valid);
+    return 1;
+}
+
+static int fromSequence(lua_State *L) {
+    const char *fname = luaL_checkstring(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+
+    int N = luaL_len(L, 2); // number of dicom tags
+    unsigned int k, j[2];
+    lua_rawgeti(L, 2, 1); // get first pair of tags | corresponds to a Sequence
+    gettag(L, j);
+    lua_pop(L, 1);
+    const gdcm::Tag tag(j[0], j[1]);
+
+    gdcm::Reader reader;
+    reader.SetFileName( fname );
+    if ( !reader.Read() ) { lua_pushnil(L); lua_pushfstring(L, "Could not read: %s", fname); return 2; }
+
+    const gdcm::DataSet & ds = reader.GetFile().GetDataSet();
+    if ( ds.FindDataElement( tag ) ) {
+	const gdcm::DataElement &seq = ds.GetDataElement( tag );
+	if (!seq.IsEmpty() || gdcm::VR::SQ == seq.GetVR()) {
+		gdcm::SmartPointer<gdcm::SequenceOfItems> sqi = seq.GetValueAsSQ(); // may throw
+	    if ( sqi != NULL) {
+		lua_newtable(L); // result TABLE
+		const gdcm::SequenceOfItems::SizeType s = sqi->GetNumberOfItems();
+		for (gdcm::SequenceOfItems::SizeType i = 1; i <= s; i++) {
+		    const gdcm::Item &item = sqi->GetItem(i);
+		    const gdcm::DataSet &nested = item.GetNestedDataSet();
+		    for(k=1; k<N;) {
+			lua_rawgeti(L, 2, ++k); // get a table w two entries, a pair of tags
+			gettag(L, j);
+			lua_pop(L, 1);
+			const gdcm::Tag t(j[0], j[1]);
+			if (nested.FindDataElement( t )) {
+			    fromByte(L, nested.GetDataElement(t));
+		    	    lua_rawseti(L, -2, k-1);
+			}
+		    }
+		}
+	    } else { lua_pushnil(L); lua_pushstring(L, "Error this isn't a valid sequence."); return 2; }
+	} else { lua_pushnil(L); lua_pushstring(L, "Error data elemente is not a Sequence of Items."); return 2; }
+    } else { lua_pushnil(L); lua_pushstring(L, "Error finding data element Tag."); return 2; }
+
     return 1;
 }
 
@@ -345,10 +397,15 @@ static int readData(lua_State *L) {
 	for (k=0; k < N;) {
 	    gdcm::Tag tag( ptag[k++] );
 	    std::string s = "";
+/*
 	    if ( tag.GetGroup() == 0x2 && header.FindDataElement( tag ))
 		s = sf.ToString( header.GetDataElement( tag ).GetTag() );
 	    else if ( ds.FindDataElement( tag ) )
 		s = sf.ToString( ds.GetDataElement( tag ).GetTag() );
+	    else
+*/
+	    if (tag.GetGroup() == 0x2 && header.FindDataElement( tag ) || ds.FindDataElement( tag ))
+		s = sf.ToString( tag );
 	    else
 		w++; // missing value
 	    if (!lua_stringtonumber(L, s.c_str())) // ADD value/empty string
@@ -395,6 +452,7 @@ static const struct luaL_Reg dcm_funcs[] = {
     {"scanner", scanner},
     {"valid", isValidTag},
     {"anonymize", deidentify},
+    {"items", fromSequence},
     {NULL, NULL}
 };
 
