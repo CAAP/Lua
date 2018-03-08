@@ -22,14 +22,9 @@ extern "C" {
 // AUXILIAR FNs
 
 typedef struct gdcmtags {
-    unsigned int size;
-    unsigned int index;
-    gdcm::Tag max;
+    int size;
     gdcm::Tag tags[1];
 } Tags;
-
-int fromByte(lua_State *L, const gdcm::DataElement &de, Tags *pt);
-int asSequence(lua_State *L, const gdcm::DataElement &de, Tags *pt);
 
 static const char* pixel2str(int pf) {
     switch (pf) {
@@ -65,10 +60,14 @@ static void getIntercept(lua_State *L, const char *filename) {
 	gdcm::File &file = reader.GetFile();
 	gdcm::DataSet &ds = file.GetDataSet();
 	strm.str("");
-	if ( ds.FindDataElement( intercept ) )
-	    ds.GetDataElement( intercept ).GetValue().Print( strm );
+	if ( ds.FindDataElement( intercept ) ) {
+		ds.GetDataElement( intercept ).GetValue().Print( strm );
+	}
 	if (!lua_stringtonumber(L, strm.str().c_str()))
 	    lua_pushinteger(L, 0);
+/*	lua_pushstring(L, strm.str().c_str());
+	lua_pushinteger(L, lua_tointeger(L, -1)); // lua_pushnumber ... lua_tonumber
+	lua_remove(L, -2); */
 	lua_setfield(L, -2, "intercept");
 
 }
@@ -80,47 +79,12 @@ static int initializeXML() {
     return 0;
 }
 
-int toString(lua_State *L, std::string s) {
-    int N = luaL_len(L, -1) + 1;
-    s.resize( std::min(s.size(), strlen(s.c_str())) );
-    if (s.size() == 0)
-	return 0;
+void fromByte(lua_State *L, const gdcm::DataElement &de) {
+    const gdcm::ByteValue *bv = de.GetByteValue();
+    std::string s( bv->GetPointer(), bv->GetLength() );
     const char *ans = s.c_str();
     if (!lua_stringtonumber(L, ans)) // ADD value/empty string
 	lua_pushstring(L, ans);
-    lua_rawseti(L, -2, N);
-    return 1;
-}
-
-int fromByte(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
-    if (gdcm::VR::SQ == de.GetVR() && !de.IsEmpty()) {
-	return asSequence(L, de, pt);
-    }
-    const gdcm::ByteValue *bv = de.GetByteValue();
-    std::string s (bv->GetPointer(), bv->GetLength());
-    return toString(L, s);
-}
-
-int asSequence(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
-    gdcm::SmartPointer<gdcm::SequenceOfItems> sqi = de.GetValueAsSQ();
-    if ( sqi != NULL) {
-	const gdcm::SequenceOfItems::SizeType s = sqi->GetNumberOfItems();
-	for (gdcm::SequenceOfItems::SizeType i = 1; i <= s; i++) {
-	    const gdcm::Item &item = sqi->GetItem(i);
-	    const gdcm::DataSet &nested = item.GetNestedDataSet();
-	    unsigned int *j = &pt->index;
-	    const gdcm::Tag *tags = pt->tags;
-	    for ( ; *j < pt->size - 1 ; ++*j) {
-		gdcm::Tag t( tags[*j+1] );
-		if (nested.FindDataElement( t ))
-		    fromByte(L, nested.GetDataElement(t), pt);
-		else
-		    return -1;
-	    }
-	    return 1;
-	}
-    }
-    return -1;
 }
 
 //////////////////////// PUBLIC FUNCTIONS //////////////////////////
@@ -139,7 +103,6 @@ static int isValidTag(lua_State *L) {
     return 1;
 }
 
-/*
 static int fromSequence(lua_State *L) {
     const char *fname = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TTABLE);
@@ -183,7 +146,6 @@ static int fromSequence(lua_State *L) {
 
     return 1;
 }
-*/
 
 
 // IMAGE
@@ -263,15 +225,13 @@ static int newReader(lua_State *L) {
 
     ptags->size = N;
     gdcm::Tag *ptag = ptags->tags;
-    unsigned int k, j[2], mx[2] = {0, 0};
+    unsigned int k, j[2];
     for(k=0; k<N;) {
 	lua_rawgeti(L, 1, ++k);
 	gettag(L, j);
 	lua_pop(L, 1);
 	*ptag++ = gdcm::Tag(j[0], j[1]);
-	if (j[0] > mx[0] || (j[0] == mx[0] && j[1] > mx[1])) { mx[0] = j[0]; mx[1] = j[1]; }
     }
-    ptags->max = gdcm::Tag(mx[0], mx[1]);
 
     return 1;
 }
@@ -421,37 +381,42 @@ static int readData(lua_State *L) {
     const char *fname = luaL_checkstring(L, 2);
 
     unsigned int N = ptags->size;
-    unsigned int *i = &ptags->index;
     gdcm::Reader reader;
     reader.SetFileName( fname );
-    if ( reader.ReadUpToTag( ptags->max ) ) {
+    if ( reader.ReadUpToTag( ptags->tags[N-1] ) ) {
 	const gdcm::DataSet & ds = reader.GetFile().GetDataSet();
 	const gdcm::FileMetaInformation & header = reader.GetFile().GetHeader();
-
 	gdcm::StringFilter sf;
 	sf.SetFile( reader.GetFile() );
-
         // create result TABLE
 	lua_newtable(L);
-	lua_pushstring(L, fname); // add
-	lua_rawseti(L, -2, 1); // filename
+	lua_pushstring(L, fname); // add filename
+	lua_rawseti(L, -2, 1);
 	gdcm::Tag *ptag = ptags->tags;
-	unsigned int w = 0;
-	for (*i = 0; *i < N; ++*i) {
-printf("Index: %d\n", *i);
-	    gdcm::Tag tag( ptag[*i] );
-	    unsigned int q = (tag.GetGroup() == 0x2 && header.FindDataElement(tag)) ? 1 : (ds.FindDataElement(tag) ? 2 : 0);
-	    if (q) {
-		if (0 == fromByte(L, (q == 1) ? header.GetDataElement(tag) : ds.GetDataElement(tag), ptags))
-		    toString(L, sf.ToString( tag ));
-	    }
+	unsigned int k, w = 0;
+	for (k=0; k < N;) {
+	    gdcm::Tag tag( ptag[k++] );
+	    std::string s = "";
+/*
+	    if ( tag.GetGroup() == 0x2 && header.FindDataElement( tag ))
+		s = sf.ToString( header.GetDataElement( tag ).GetTag() );
+	    else if ( ds.FindDataElement( tag ) )
+		s = sf.ToString( ds.GetDataElement( tag ).GetTag() );
+	    else
+*/
+	    if (tag.GetGroup() == 0x2 && header.FindDataElement( tag ) || ds.FindDataElement( tag ))
+		s = sf.ToString( tag );
 	    else
 		w++; // missing value
+	    if (!lua_stringtonumber(L, s.c_str())) // ADD value/empty string
+		lua_pushstring(L, s.c_str());
+	    lua_rawseti(L, -2, k+1);
 	}
 	lua_pushinteger(L, w);
 	lua_setfield(L, -2, "missed"); // mising values are added to TABLE
         return 1;
-    } else { lua_pushnil(L); lua_pushstring(L, "Error reading file."); return 2; }
+    }
+    else { lua_pushnil(L); lua_pushstring(L, "Error reading file."); return 2; }
 }
 
 static int isValid(lua_State *L) {
@@ -487,7 +452,7 @@ static const struct luaL_Reg dcm_funcs[] = {
     {"scanner", scanner},
     {"valid", isValidTag},
     {"anonymize", deidentify},
-//    {"items", fromSequence},
+    {"items", fromSequence},
     {NULL, NULL}
 };
 
