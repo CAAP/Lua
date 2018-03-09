@@ -56,6 +56,11 @@ static void gettag(lua_State *L, unsigned int *hexs) {
 	}
 }
 
+int isSequence(const gdcm::Tag t) {
+    const gdcm::DictEntry &entry = dicts.GetDictEntry( t );
+    return (entry.GetVR() == gdcm::VR::SQ);
+}
+
 static void getIntercept(lua_State *L, const char *filename) {
 	gdcm::Tag intercept(0x0028, 0x1052);
 	std::stringstream strm;
@@ -80,8 +85,8 @@ static int initializeXML() {
     return 0;
 }
 
-int toString(lua_State *L, std::string s) {
-    int N = luaL_len(L, -1) + 1;
+int toString(lua_State *L, std::string s, int N) {
+//    int N = luaL_len(L, -1) + 1;
     s.resize( std::min(s.size(), strlen(s.c_str())) );
     if (s.size() == 0)
 	return 0;
@@ -98,7 +103,7 @@ int fromByte(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
     }
     const gdcm::ByteValue *bv = de.GetByteValue();
     std::string s (bv->GetPointer(), bv->GetLength());
-    return toString(L, s);
+    return toString(L, s, pt->index+2); // due to: index starts at & path always first
 }
 
 int asSequence(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
@@ -438,15 +443,20 @@ static int readData(lua_State *L) {
 	gdcm::Tag *ptag = ptags->tags;
 	unsigned int w = 0;
 	for (*i = 0; *i < N; ++*i) {
-printf("Index: %d\n", *i);
 	    gdcm::Tag tag( ptag[*i] );
 	    unsigned int q = (tag.GetGroup() == 0x2 && header.FindDataElement(tag)) ? 1 : (ds.FindDataElement(tag) ? 2 : 0);
 	    if (q) {
 		if (0 == fromByte(L, (q == 1) ? header.GetDataElement(tag) : ds.GetDataElement(tag), ptags))
-		    toString(L, sf.ToString( tag ));
+		    toString(L, sf.ToString( tag ), *i+2); // due to: index starts at 0 & path is first arg always
 	    }
-	    else
-		w++; // missing value
+	    else {
+		if (!isSequence(tag)) { // MAYBE ERROR when more than one sequence is present XXX
+		    int N = luaL_len(L, -1) + 1;
+		    w++; // missing value
+		    lua_pushstring(L, "");
+		    lua_rawseti(L, -2, N);
+	        }
+	    }
 	}
 	lua_pushinteger(L, w);
 	lua_setfield(L, -2, "missed"); // mising values are added to TABLE
@@ -458,10 +468,9 @@ static int isValid(lua_State *L) {
     Tags *ptags = (Tags *)luaL_checkudata(L, 1, "caap.gdcm.reader");
     const char *fname = luaL_checkstring(L, 2);
 
-    int N = ptags->size;
     gdcm::Reader reader;
     reader.SetFileName( fname );
-    lua_pushboolean( L, reader.ReadUpToTag( ptags->tags[N-1] ) );
+    lua_pushboolean( L, reader.ReadUpToTag( ptags->max ) );
     return 1;
 }
 
@@ -487,7 +496,6 @@ static const struct luaL_Reg dcm_funcs[] = {
     {"scanner", scanner},
     {"valid", isValidTag},
     {"anonymize", deidentify},
-//    {"items", fromSequence},
     {NULL, NULL}
 };
 
