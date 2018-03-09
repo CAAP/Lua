@@ -85,8 +85,8 @@ static int initializeXML() {
     return 0;
 }
 
-int toString(lua_State *L, std::string s, int N) {
-//    int N = luaL_len(L, -1) + 1;
+int toString(lua_State *L, std::string s) {
+    int N = luaL_len(L, -1) + 1;
     s.resize( std::min(s.size(), strlen(s.c_str())) );
     if (s.size() == 0)
 	return 0;
@@ -103,7 +103,7 @@ int fromByte(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
     }
     const gdcm::ByteValue *bv = de.GetByteValue();
     std::string s (bv->GetPointer(), bv->GetLength());
-    return toString(L, s, pt->index+2); // due to: index starts at & path always first
+    return toString(L, s); //  , pt->index+2
 }
 
 int asSequence(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
@@ -447,7 +447,7 @@ static int readData(lua_State *L) {
 	    unsigned int q = (tag.GetGroup() == 0x2 && header.FindDataElement(tag)) ? 1 : (ds.FindDataElement(tag) ? 2 : 0);
 	    if (q) {
 		if (0 == fromByte(L, (q == 1) ? header.GetDataElement(tag) : ds.GetDataElement(tag), ptags))
-		    toString(L, sf.ToString( tag ), *i+2); // due to: index starts at 0 & path is first arg always
+		    toString(L, sf.ToString( tag )); // *i+2 ;;; due to: index starts at 0 & path is first arg always
 	    }
 	    else {
 		if (!isSequence(tag)) { // MAYBE ERROR when more than one sequence is present XXX
