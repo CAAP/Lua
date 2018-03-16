@@ -18,15 +18,6 @@ else(LUA_LIBRARY)
     message(FATAL_ERROR "CMake could not find Lua Library")
 endif(LUA_LIBRARY)
 
-find_library(GDCM_LIBRARY
-    NAMES gdcmCommon)
-
-if(GDCM_LIBRARY)
-	target_link_libraries(litk ${GDCM_LIBRARY})
-else(GDCM_LIBRARY)
-	message(FATAL_ERROR "CMake could not find GDCM Library")
-endif(GDCM_LIBRARY)
-
 set_target_properties(litk PROPERTIES PREFIX "")
 
 install(TARGETS litk DESTINATION $ENV{ROCKS_LIB})

@@ -7,14 +7,240 @@
 #include "itkGDCMSeriesFileNames.h"
 #include "itkImageSeriesReader.h"
 
-#include <gdcm/gdcmImage.h>
-#include <gdcm/gdcmImageReader.h>
 
 #include <lua.hpp>
 #include <lauxlib.h>
 #include <string.h>
 
+
 #define catchMe(L) catch (itk::ExceptionObject &ex) { lua_pushnil(L); lua_pushfstring(L, "Exception found: %s\n", ex); return 2; }
+
+
+template<typename TImage>
+int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) {
+    typedef itk::ImageFileWriter<TImage> WriterType;
+    typename WriterType::Pointer writer = WriterType::New();
+    writer->SetFileName( fname );
+
+    const char *ext = strrchr(fname, '.');
+    if (!(strcmp(ext, ".vtk") && strcmp(ext, ".VTK"))) {
+	typedef itk::VTKImageIO ImageIOType;
+	typename ImageIOType::Pointer vtkIO = ImageIOType::New();
+	writer->SetImageIO( vtkIO );
+    }
+
+    try {
+	writer->SetInput( input );
+	writer->Update();
+    } catchMe(L)
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+template<typename TScalar>
+int imageIOGDCM(lua_State *L, std::vector<std::string> fileNames, const char *path) {
+    typedef itk::Image<TScalar, 3> TImage;
+    typedef itk::ImageSeriesReader<TImage> ReaderType;
+    typename ReaderType::Pointer reader = ReaderType::New();
+
+    typedef itk::GDCMImageIO ImageIOType;
+    typename ImageIOType::Pointer dicomIO = ImageIOType::New();
+
+    try {
+	reader->SetImageIO( dicomIO );
+	reader->SetFileNames( fileNames );
+	reader->Update();
+    } catchMe(L)
+
+    return writeImage<TImage>(L, reader->GetOutput(), path);
+}
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+// Inspect IMAGEs
+
+static int getInfo(lua_State *L) {
+    const char *path = luaL_checkstring(L, 1);
+    itk::ImageIOBase::Pointer imageIO = itk::ImageIOFactory::CreateImageIO(path, itk::ImageIOFactory::ReadMode);
+    imageIO->SetFileName(path);
+    imageIO->ReadImageInformation();
+    unsigned int k, dims = imageIO->GetNumberOfDimensions();
+    itk::ImageIOBase::IOComponentType type = imageIO->GetComponentType();
+
+    lua_newtable(L);
+    lua_pushinteger(L, dims);
+    lua_setfield(L, -2, "dims");
+    lua_pushstring(L, imageIO->GetComponentTypeAsString(type).c_str());
+    lua_setfield(L, -2, "type");
+    lua_pushinteger(L, type);
+    lua_setfield(L, -2, "ctype");
+    lua_pushstring(L, imageIO->GetPixelTypeAsString(imageIO->GetPixelType()).c_str());
+    lua_setfield(L, -2, "pixel");
+    lua_pushstring(L, imageIO->GetByteOrderAsString(imageIO->GetByteOrder()).c_str());
+    lua_setfield(L, -2, "order"); // Little/Big Endian
+    lua_pushinteger(L, imageIO->GetImageSizeInBytes());
+    lua_setfield(L, -2, "size");
+
+    // Origin, spacing & [direction XXX]
+    lua_newtable(L); // origin (-5) | (-3)
+    lua_newtable(L); // spacing (-4) | (-2)
+//    lua_newtable(L); // direction (-3) | (-1)
+    for(k=0; k<dims;) {
+	const double sp = imageIO->GetSpacing(k);
+	lua_pushnumber(L, imageIO->GetOrigin(k)); // (-2)
+	lua_pushnumber(L, sp); // (-1)
+	lua_rawseti(L, -3, ++k);
+	lua_rawseti(L, -3, k);
+    }
+    lua_setfield(L, -3, "spacing");
+    lua_setfield(L, -2, "origin");
+
+    return 1;
+}
+
+//  IMAGE
+//  itk::Image
+//  n-dimensional regular sampling of data
+//  The pixel type is arbitrary and specified upon instantiation.
+//  The dimensionality must also be specified upon instantiation.
+
+/////// 3D Image Volume
+
+// input
+// (1) ComponentType [int]
+// (2) FilesInSeries [table]
+// (3) Filename,path [string]
+static int dicomSeries(lua_State *L) {
+    const char *path = luaL_checkstring(L, 3); 
+    luaL_checktype(L, 2, LUA_TTABLE);
+    typedef std::vector< std::string > FileNamesContainer;
+    FileNamesContainer fileNames;
+    int i, k = luaL_len(L, 2);
+    for (i=0; i<k;) {
+	lua_rawgeti(L, 2, ++i);
+    	fileNames.push_back( lua_tostring(L, -1) );
+	lua_pop(L, 1);
+    }
+
+    switch((itk::ImageIOBase::IOComponentType)luaL_checkinteger(L, 1)) {
+	case itk::ImageIOBase::SHORT:   return imageIOGDCM<short>(L, fileNames, path); 		break;
+	case itk::ImageIOBase::USHORT:  return imageIOGDCM<unsigned short>(L, fileNames, path);	break;
+	case itk::ImageIOBase::INT:	return imageIOGDCM<int>(L, fileNames, path);		break;
+	case itk::ImageIOBase::FLOAT:   return imageIOGDCM<float>(L, fileNames, path); 		break;
+	case itk::ImageIOBase::DOUBLE:  return imageIOGDCM<double>(L, fileNames, path);		break;
+	default:
+	    lua_pushnil(L);
+	    lua_pushstring(L, "Error: Unsupported pixel type.\n");
+	    return 2;
+    }
+}
+
+//------------------------//
+
+// AUXILIAR FNs
+
+////////// Interface METHODs ///////////
+
+#define checkgen(L, i, T) *(T *)luaL_checkudata(L, i, "caap.itk.gdcm.namesGenerator")
+
+// 3D Image Volume
+
+//--------------WRITER-----------------//
+
+
+
+//////////////////////////////
+
+static const struct luaL_Reg itk_funcs[] = {
+  {"info", getInfo},
+  {"series", dicomSeries},
+  {NULL, NULL}
+};
+
+
+////////////////////////////
+
+int luaopen_litk (lua_State *L) {
+  //  IMAGE
+  luaL_newmetatable(L, "caap.itk.image");
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -1, "__index");
+//  luaL_setfuncs(L, itk_funcs, 0);
+
+  // create the library
+  luaL_newlib(L, itk_funcs);
+  return 1;
+}
+
+
+#ifdef __cplusplus
+}
+#endif
+
+
+
+/*
+
+// input
+// (1) ComponentType [int]
+static int creteImage(lua_State *L) {
+    switch((itk::ImageIOBase)luaL_checkinteger(L, 1)) {
+	case itk::ImageIOBase::SHORT:   return newImage<short>(L); 		break;
+	case itk::ImageIOBase::USHORT:  return newImage<unsigned short>(L); 	break;
+	case itk::ImageIOBase::INT:	return newImage<int>(L);		break;
+	case itk::ImageIOBase::FLOAT:   return newImage<float>(L); 		break;
+	case itk::ImageIOBase::DOUBLE:  return newImage<double>(L); 		break;
+	default:
+	    lua_pushnil(L);
+	    lua_pushstring(L, "Error: Unsupported pixel type.\n");
+	    return 2;
+    }
+}
+
+
+
+template<typename TScalar>
+int newImage(lua_State *L) {
+    typedef itk::Image<TScalar, 3> ImageType;
+    typename ImageType::Pointer PIType;
+    typename PIType *img = (PIType *)lua_newuserdata(L, sizeof(PIType));
+    luaL_getmetatable(L, "caap.itk.image");
+    lua_setmetatable(L, -2);
+    *img = ImageType::New();
+    return 1;
+}
+
+
+
+
+template<typename TScalar>
+int imageIOGDCM(lua_State *L, std::vector<std::string> fileNames) {
+    typedef itk::Image<TScalar, 3> TImage;
+    typedef itk::ImageSeriesReader<TImage> ReaderType;
+    typedef ReaderType::Pointer PRType;
+    typename PRType *rdr = (PRType *)lua_newuserdata(L, sizeof(PRType));
+    luaL_getmetatable(L, "caap.itk.imageio");
+    // closure
+    lua_setmetatable(L, -2);
+    *rdr = ReaderType::New();
+    typename PRType reader = *rdr;
+
+    typedef itk::GDCMImageIO ImageIOType;
+    typename ImageIOType::Pointer dicomIO = ImageIOType::New();
+
+    try {
+	reader->SetImageIO( dicomIO );
+	reader->SetFileNames( fileNames );
+	reader->Update();
+    } catchMe(L)
+
+    return 1;
+}
 
 template<typename TImage>
 void deepCopy(typename TImage::Pointer input, typename TImage::Pointer &output) {
@@ -27,55 +253,7 @@ void deepCopy(typename TImage::Pointer input, typename TImage::Pointer &output) 
 	++inputIterator; ++outputIterator;
     }
 }
-
-template<typename TImage>
-void readImage(typename TImage::Pointer output, const char *fname) {
-    typedef itk::ImageFileReader< TImage > ReaderType;
-    typename ReaderType::Pointer reader = ReaderType::New();
-    reader->SetFileName( fname );
-
-    const char *ext = strrchr(fname, '.');
-    if (!(strcmp(ext, ".vtk") && strcmp(ext, ".VTK"))) {
-	typedef itk::VTKImageIO ImageIOType;
-	typename ImageIOType::Pointer vtkIO = ImageIOType::New();
-	reader->SetImageIO( vtkIO );
-    }
-
-    reader->Update();
-    typename TImage::Pointer ans = reader->GetOutput();
-    deepCopy<TImage>(ans, output);
-}
-
-template<typename TImage>
-void readDCM(typename TImage::Pointer output, std::vector<std::string> fileNames) {
-    typedef itk::ImageSeriesReader<TImage> ReaderType;
-    typename ReaderType::Pointer reader = ReaderType::New();
-    typedef itk::GDCMImageIO ImageIOType;
-    typename ImageIOType::Pointer dicomIO = ImageIOType::New();
-
-    reader->SetImageIO( dicomIO );
-    reader->SetFileNames( fileNames );
-    reader->Update();
-    typename TImage::Pointer ans = reader->GetOutput();
-    deepCopy<TImage>(ans, output);
-}
-
-template<typename TImage>
-void writeImage(typename TImage::Pointer input, const char* fname) {
-    typedef itk::ImageFileWriter<TImage> WriterType;
-    typename WriterType::Pointer writer = WriterType::New();
-    writer->SetFileName( fname );
-
-    const char *ext = strrchr(fname, '.');
-    if (!(strcmp(ext, ".vtk") && strcmp(ext, ".VTK"))) {
-	typedef itk::VTKImageIO ImageIOType;
-	typename ImageIOType::Pointer vtkIO = ImageIOType::New();
-	writer->SetImageIO( vtkIO );
-    }
-
-    writer->SetInput( input );
-    writer->Update();
-}
+*/
 
 /*
 template<typename TImage>
@@ -86,119 +264,66 @@ void regions(typename TImage::Pointer img, const int x, const int y, unsigned in
     img->SetRegions( region );
     img->Allocate();
 }
-*/
 
+static int doubleRegions(lua_State *L) {
+    typedef itk::Image<float, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
+    const int x = luaL_checkinteger(L, 2);
+    const int y = luaL_checkinteger(L, 3);
+    unsigned int dx = luaL_checkinteger(L, 4);
+    unsigned int dy = luaL_checkinteger(L, 5);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+    regions<ImageType>(img, x, y, dx, dy);
+    return 1;
+}
 
+static int floatRegions(lua_State *L) {
+    typedef itk::Image<float, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
+    const int x = luaL_checkinteger(L, 2);
+    const int y = luaL_checkinteger(L, 3);
+    unsigned int dx = luaL_checkinteger(L, 4);
+    unsigned int dy = luaL_checkinteger(L, 5);
 
-//  {"setRegions", T ## Regions}},
-#define metaTable(T) luaL_newmetatable(L, "caap.itk.image." #T); lua_pushvalue(L, -1);lua_setfield(L, -1, "__index"); luaL_setfuncs(L, itk_ ## T ## _meths, 0)
-#define interFuncs(T) {"read", T ## Reader}, {"dicom", T ## Dicom}, {"write", T ## Writer, {NULL, NULL}
-#define getter(Method, L, io, v, k) io->Get ## Method (v);lua_pushstring(L, v);lua_rawseti(L, -2, k++)
+    regions<ImageType>(img, x, y, dx, dy);
+    return 1;
+}
 
-#define newimg(L, P, T) (P *)lua_newuserdata(L, sizeof(P));luaL_getmetatable(L, "caap.itk.image." #T);lua_setmetatable(L, -2)
-#define checkimg(L, i, T) luaL_checkudata(L, i, "caap.itk.image." #T)
+static int intRegions(lua_State *L) {
+    typedef itk::Image<int, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
+    const int x = luaL_checkinteger(L, 2);
+    const int y = luaL_checkinteger(L, 3);
+    unsigned int dx = luaL_checkinteger(L, 4);
+    unsigned int dy = luaL_checkinteger(L, 5);
 
-#define newgen(L, T) (T *)lua_newuserdata(L, sizeof(T));luaL_getmetatable(L, "caap.itk.gdcm.namesGenerator");lua_setmetatable(L, -2)
-#define checkgen(L, i, T) *(T *)luaL_checkudata(L, i, "caap.itk.gdcm.namesGenerator")
+    regions<ImageType>(img, x, y, dx, dy);
+    return 1;
+}
 
+static int ushortRegions(lua_State *L) {
+    typedef itk::Image<unsigned short, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
+    const int x = luaL_checkinteger(L, 2);
+    const int y = luaL_checkinteger(L, 3);
+    unsigned int dx = luaL_checkinteger(L, 4);
+    unsigned int dy = luaL_checkinteger(L, 5);
+    regions<ImageType>(img, x, y, dx, dy);
+    return 1;
+}
 
-// Inspect IMAGEs
-
-static int getInfo(lua_State *L) {
-    const char *path = luaL_checkstring(L, 1);
-    itk::ImageIOBase::Pointer imageIO = itk::ImageIOFactory::CreateImageIO(path, itk::ImageIOFactory::ReadMode);
-    imageIO->SetFileName(path);
-    imageIO->ReadImageInformation();
-
-    lua_newtable(L);
-    lua_pushinteger(L, imageIO->GetNumberOfDimensions());
-    lua_setfield(L, -2, "dims");
-    lua_pushstring(L, imageIO->GetComponentTypeAsString(imageIO->GetComponentType()).c_str());
-    lua_setfield(L, -2, "type");
-    lua_pushstring(L, imageIO->GetPixelTypeAsString(imageIO->GetPixelType()).c_str());
-    lua_setfield(L, -2, "pixel");
+static int shortRegions(lua_State *L) {
+    typedef itk::Image<short, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, short);
+    const int x = luaL_checkinteger(L, 2);
+    const int y = luaL_checkinteger(L, 3);
+    unsigned int dx = luaL_checkinteger(L, 4);
+    unsigned int dy = luaL_checkinteger(L, 5);
+    regions<ImageType>(img, x, y, dx, dy);
     return 1;
 }
 
 
-// GDCM
-
-static int seriesReader(lua_State *L) {
-    const char* dirname = luaL_checkstring(L, 1);
-    typedef itk::GDCMSeriesFileNames NamesGeneratorType;
-    NamesGeneratorType::Pointer *nameGenerator = newgen(L, NamesGeneratorType::Pointer);
-    *nameGenerator = NamesGeneratorType::New();
-
-    (*nameGenerator)->SetUseSeriesDetails( true );
-    (*nameGenerator)->AddSeriesRestriction( "0008|0021" ); // Series Date
-    (*nameGenerator)->RecursiveOn();
-    (*nameGenerator)->SetInputDirectory( dirname );
-
-    return 1;
-}
-
-static int getPixelType(lua_State *L) {
-    const char *filename = luaL_checkstring(L, 1);
-
-    gdcm::ImageReader reader;
-    reader.SetFileName( filename );
-    if ( !reader.Read() ) {
-	lua_pushnil(L); lua_pushfstring(L, "ERROR: could not read %s \n", filename); return 2;
-    }
-    gdcm::Image & image = reader.GetImage();
-    const gdcm::PixelFormat pf = image.GetPixelFormat();
-
-    switch (pf) {
-	case gdcm::PixelFormat::INT8: lua_pushstring(L, "char"); return 1;
-	case gdcm::PixelFormat::UINT8: lua_pushstring(L, "uchar"); return 1;
-	case gdcm::PixelFormat::INT16: lua_pushstring(L, "short"); return 1;
-	case gdcm::PixelFormat::UINT16: lua_pushstring(L, "ushort"); return 1;
-	case gdcm::PixelFormat::INT32: lua_pushstring(L, "int"); return 1;
-	case gdcm::PixelFormat::FLOAT32: lua_pushstring(L, "float"); return 1;
-	case gdcm::PixelFormat::FLOAT64: lua_pushstring(L, "double"); return 1;
-	default: lua_pushnil(L); lua_pushfstring(L, "ERROR: cannot identify pixel format for file %s.\n", filename); return 2;
-    }
-}
-
-
-//  IMAGE
-//  itk::Image
-//  n-dimensional regular sampling of data
-//  The pixel type is arbitrary and specified upon instantiation.
-//  The dimensionality must also be specified upon instantiation.
-
-/////// 3D Image Volume
-
-//------------------------//
-
-// AUXILIAR FNs
-
-/*
-// Institution, Modality, PatientAge, PatientID, PatientName, PatientSex, StudyDate, StudyDescription, StudyID, RescaleSlope, RescaleIntercept, StudyInstanceUID, SeriesInstanceUID
-void getInfo() {
-    lua_newtable(L);
-    int k = 1;
-    char *v;
-
-    getter(Institution, L, dicomIO, v, k);
-    getter(Modality, L, dicomIO, v, k);
-    getter(PatientAge, L, dicomIO, v, k);
-    getter(PatientID, L, dicomIO, v, k);
-    getter(PatientName, L, dicomIO, v, k);
-    getter(PatientSex, L, dicomIO, v, k);
-    getter(StudyDate, L, dicomIO, v, k);
-    getter(StudyDescription, L, dicomIO, v, k);
-    getter(StudyID, L, dicomIO, v, k);
-    getter(RescaleSlope, L, dicomIO, v, k);
-    getter(RescaleIntercept, L, dicomIO, v, k);
-    getter(StudyInstanceUID, L, dicomIO, v, k);
-    getter(SeriesInstanceUID, L, dicomIO, v, k);
-}
-*/
 
 static int shortNew(lua_State *L) {
     typedef itk::Image<short, 3> ImageType;
@@ -236,60 +361,23 @@ static int doubleNew(lua_State *L) {
 }
 
 
-////////// Interface METHODs ///////////
 
-// AUXILIAR FNs
+template<typename TImage>
+void readImage(typename TImage::Pointer output, const char *fname) {
+    typedef itk::ImageFileReader< TImage > ReaderType;
+    typename ReaderType::Pointer reader = ReaderType::New();
+    reader->SetFileName( fname );
 
-void fromVector(lua_State *L, const std::vector<std::string> v) {
-    int i = 1;
-    for(auto it = v.begin(); it != v.end(); ++it) {
-	lua_pushstring(L, it->c_str() );
-	lua_rawseti(L, -2, i++);
+    const char *ext = strrchr(fname, '.');
+    if (!(strcmp(ext, ".vtk") && strcmp(ext, ".VTK"))) {
+	typedef itk::VTKImageIO ImageIOType;
+	typename ImageIOType::Pointer vtkIO = ImageIOType::New();
+	reader->SetImageIO( vtkIO );
     }
+
+    reader->Update();
 }
 
-// GDCM
-
-static int addRestriction(lua_State *L) {
-    typedef itk::GDCMSeriesFileNames NamesGeneratorType;
-    NamesGeneratorType::Pointer nameGenerator = checkgen(L, 1, NamesGeneratorType::Pointer);
-    const char *rest = luaL_checkstring(L, 2);
-    nameGenerator->AddSeriesRestriction(rest);
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-static int getUIDs(lua_State *L) {
-    typedef itk::GDCMSeriesFileNames NamesGeneratorType;
-    NamesGeneratorType::Pointer nameGenerator = checkgen(L, 1, NamesGeneratorType::Pointer);
-    if (nameGenerator.IsNull()) { luaL_error(L, "ERROR: NULL pointer for class GDCMSeriesFileNames.\n"); }
-
-    try {
-	typedef std::vector< std::string > SeriesIdContainer;
-	const SeriesIdContainer & seriesUID = nameGenerator->GetSeriesUIDs();
-	lua_newtable(L);
-	fromVector(L, seriesUID);
-	return 1;
-    }
-    catchMe(L)
-
-}
-
-static int getFiles(lua_State *L) {
-    typedef itk::GDCMSeriesFileNames NamesGeneratorType;
-    NamesGeneratorType::Pointer nameGenerator = checkgen(L, 1, NamesGeneratorType::Pointer);
-    try {
-	const char* seriesID = luaL_checkstring(L, 2);
-	typedef std::vector< std::string > FileNamesContainer;
-	FileNamesContainer fileNames = nameGenerator->GetFileNames( seriesID );
-	lua_newtable(L);
-	fromVector(L, fileNames);
-	return 1;
-    }
-    catchMe(L)
-}
-
-// 3D Image Volume
 
 static int shortReader(lua_State *L) {
     typedef itk::Image<short, 3> ImageType;
@@ -323,213 +411,6 @@ static int shortDicom(lua_State *L) {
     catchMe(L)
 }
 
-static int shortWriter(lua_State *L) {
-    typedef itk::Image<short, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, short);
-    const char *fname = luaL_checkstring(L, 2);
-    try {
-	writeImage<ImageType>(img, fname);
-	return 1;
-    }
-    catchMe(L)
-}
-
-/*
-static int shortRegions(lua_State *L) {
-    typedef itk::Image<short, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, short);
-    const int x = luaL_checkinteger(L, 2);
-    const int y = luaL_checkinteger(L, 3);
-    unsigned int dx = luaL_checkinteger(L, 4);
-    unsigned int dy = luaL_checkinteger(L, 5);
-    regions<ImageType>(img, x, y, dx, dy);
-    return 1;
-}
-
-
-*/
-
-//----------------------------------//
-
-static int ushortReader(lua_State *L) {
-    typedef itk::Image<unsigned short, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
-    const char *fname = luaL_checkstring(L, 2);
-    try {
-	readImage<ImageType>(img, fname);
-	return 1;
-    }
-    catchMe(L)
-}
-
-static int ushortDicom(lua_State *L) {
-    typedef itk::Image<unsigned short, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
-
-    luaL_checktype(L, 2, LUA_TTABLE);
-    typedef std::vector< std::string > FileNamesContainer;
-    FileNamesContainer fileNames;
-    int i, k = luaL_len(L, 2);
-    for (i=0; i<k;) {
-	lua_rawgeti(L, 2, ++i);
-    	fileNames.push_back( lua_tostring(L, -1) );
-	lua_pop(L, 1);
-    }
-
-    try {
-	readDCM<ImageType>(img, fileNames);
-	return 1;
-    }
-    catchMe(L)
-}
-
-static int ushortWriter(lua_State *L) {
-    typedef itk::Image<unsigned short, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
-    const char *fname = luaL_checkstring(L, 2);
-    try {
-	writeImage<ImageType>(img, fname);
-	return 1;
-    }
-    catchMe(L)
-}
-
-/*
-static int ushortRegions(lua_State *L) {
-    typedef itk::Image<unsigned short, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
-    const int x = luaL_checkinteger(L, 2);
-    const int y = luaL_checkinteger(L, 3);
-    unsigned int dx = luaL_checkinteger(L, 4);
-    unsigned int dy = luaL_checkinteger(L, 5);
-    regions<ImageType>(img, x, y, dx, dy);
-    return 1;
-}
-*/
-
-//----------------------------------//
-
-static int intReader(lua_State *L) {
-    typedef itk::Image<int, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
-    const char *fname = luaL_checkstring(L, 2);
-    try {
-	readImage<ImageType>(img, fname);
-	return 1;
-    }
-    catchMe(L)
-}
-
-static int intDicom(lua_State *L) {
-    typedef itk::Image<int, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
-
-    luaL_checktype(L, 2, LUA_TTABLE);
-    typedef std::vector< std::string > FileNamesContainer;
-    FileNamesContainer fileNames;
-    int i, k = luaL_len(L, 2);
-    for (i=0; i<k;) {
-	lua_rawgeti(L, 2, ++i);
-    	fileNames.push_back( lua_tostring(L, -1) );
-	lua_pop(L, 1);
-    }
-
-    try {
-	readDCM<ImageType>(img, fileNames);
-	return 1;
-    }
-    catchMe(L)
-}
-
-static int intWriter(lua_State *L) {
-    typedef itk::Image<int, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
-    const char *fname = luaL_checkstring(L, 2);
-    try {
-	writeImage<ImageType>(img, fname);
-	return 1;
-    }
-    catchMe(L)
-}
-
-/*
-static int intRegions(lua_State *L) {
-    typedef itk::Image<int, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
-    const int x = luaL_checkinteger(L, 2);
-    const int y = luaL_checkinteger(L, 3);
-    unsigned int dx = luaL_checkinteger(L, 4);
-    unsigned int dy = luaL_checkinteger(L, 5);
-
-    regions<ImageType>(img, x, y, dx, dy);
-    return 1;
-}
-
-
-*/
-
-//----------------------------------//
-
-static int floatReader(lua_State *L) {
-    typedef itk::Image<float, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
-    const char *fname = luaL_checkstring(L, 2);
-    try{
-	readImage<ImageType>(img, fname);
-	return 1;
-    }
-    catchMe(L)
-}
-
-static int floatDicom(lua_State *L) {
-    typedef itk::Image<float, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
-
-    luaL_checktype(L, 2, LUA_TTABLE);
-    typedef std::vector< std::string > FileNamesContainer;
-    FileNamesContainer fileNames;
-    int i, k = luaL_len(L, 2);
-    for (i=0; i<k;) {
-	lua_rawgeti(L, 2, ++i);
-    	fileNames.push_back( lua_tostring(L, -1) );
-	lua_pop(L, 1);
-    }
-
-    try {
-	readDCM<ImageType>(img, fileNames);
-	return 1;
-    }
-    catchMe(L)
-}
-
-static int floatWriter(lua_State *L) {
-    typedef itk::Image<float, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
-    const char *fname = luaL_checkstring(L, 2);
-    try {
-	writeImage<ImageType>(img, fname);
-	return 1;
-    }
-    catchMe(L)
-}
-
-/*
-static int floatRegions(lua_State *L) {
-    typedef itk::Image<float, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
-    const int x = luaL_checkinteger(L, 2);
-    const int y = luaL_checkinteger(L, 3);
-    unsigned int dx = luaL_checkinteger(L, 4);
-    unsigned int dy = luaL_checkinteger(L, 5);
-
-    regions<ImageType>(img, x, y, dx, dy);
-    return 1;
-}
-
-
-*/
-
-//----------------------------------//
 
 static int doubleReader(lua_State *L) {
     typedef itk::Image<float, 3> ImageType;
@@ -563,6 +444,146 @@ static int doubleDicom(lua_State *L) {
     catchMe(L)
 }
 
+static int floatReader(lua_State *L) {
+    typedef itk::Image<float, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
+    const char *fname = luaL_checkstring(L, 2);
+    try{
+	readImage<ImageType>(img, fname);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int floatDicom(lua_State *L) {
+    typedef itk::Image<float, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
+
+    luaL_checktype(L, 2, LUA_TTABLE);
+    typedef std::vector< std::string > FileNamesContainer;
+    FileNamesContainer fileNames;
+    int i, k = luaL_len(L, 2);
+    for (i=0; i<k;) {
+	lua_rawgeti(L, 2, ++i);
+    	fileNames.push_back( lua_tostring(L, -1) );
+	lua_pop(L, 1);
+    }
+
+    try {
+	readDCM<ImageType>(img, fileNames);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int ushortReader(lua_State *L) {
+    typedef itk::Image<unsigned short, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
+    const char *fname = luaL_checkstring(L, 2);
+    try {
+	readImage<ImageType>(img, fname);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int ushortDicom(lua_State *L) {
+    typedef itk::Image<unsigned short, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
+
+    luaL_checktype(L, 2, LUA_TTABLE);
+    typedef std::vector< std::string > FileNamesContainer;
+    FileNamesContainer fileNames;
+    int i, k = luaL_len(L, 2);
+    for (i=0; i<k;) {
+	lua_rawgeti(L, 2, ++i);
+    	fileNames.push_back( lua_tostring(L, -1) );
+	lua_pop(L, 1);
+    }
+
+    try {
+	readDCM<ImageType>(img, fileNames);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int intReader(lua_State *L) {
+    typedef itk::Image<int, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
+    const char *fname = luaL_checkstring(L, 2);
+    try {
+	readImage<ImageType>(img, fname);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int intDicom(lua_State *L) {
+    typedef itk::Image<int, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
+
+    luaL_checktype(L, 2, LUA_TTABLE);
+    typedef std::vector< std::string > FileNamesContainer;
+    FileNamesContainer fileNames;
+    int i, k = luaL_len(L, 2);
+    for (i=0; i<k;) {
+	lua_rawgeti(L, 2, ++i);
+    	fileNames.push_back( lua_tostring(L, -1) );
+	lua_pop(L, 1);
+    }
+
+    try {
+	readDCM<ImageType>(img, fileNames);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int shortWriter(lua_State *L) {
+    typedef itk::Image<short, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, short);
+    const char *fname = luaL_checkstring(L, 2);
+    try {
+	writeImage<ImageType>(img, fname);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int ushortWriter(lua_State *L) {
+    typedef itk::Image<unsigned short, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, ushort);
+    const char *fname = luaL_checkstring(L, 2);
+    try {
+	writeImage<ImageType>(img, fname);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int intWriter(lua_State *L) {
+    typedef itk::Image<int, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, int);
+    const char *fname = luaL_checkstring(L, 2);
+    try {
+	writeImage<ImageType>(img, fname);
+	return 1;
+    }
+    catchMe(L)
+}
+
+static int floatWriter(lua_State *L) {
+    typedef itk::Image<float, 3> ImageType;
+    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
+    const char *fname = luaL_checkstring(L, 2);
+    try {
+	writeImage<ImageType>(img, fname);
+	return 1;
+    }
+    catchMe(L)
+}
+
 static int doubleWriter(lua_State *L) {
     typedef itk::Image<float, 3> ImageType;
     ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
@@ -574,82 +595,9 @@ static int doubleWriter(lua_State *L) {
     catchMe(L)
 }
 
-/*
-static int doubleRegions(lua_State *L) {
-    typedef itk::Image<float, 3> ImageType;
-    ImageType::Pointer img = *(ImageType::Pointer *)checkimg(L, 1, float);
-    const int x = luaL_checkinteger(L, 2);
-    const int y = luaL_checkinteger(L, 3);
-    unsigned int dx = luaL_checkinteger(L, 4);
-    unsigned int dy = luaL_checkinteger(L, 5);
 
-    regions<ImageType>(img, x, y, dx, dy);
-    return 1;
-}
 
 
 */
 
 
-//////////////////////////////
-#define regFunc(T) {#T "New", T ## New}
-
-static const struct luaL_Reg itk_funcs[] = {
-  regFunc(short),
-  regFunc(ushort),
-  regFunc(int),
-  regFunc(float),
-  regFunc(double),
-  {"series", seriesReader},
-  {"pixelType", getPixelType},
-  {"info", getInfo},
-  {NULL, NULL}
-};
-
-static const struct luaL_Reg gdcm_meths[] = {
-  {"restrict", addRestriction},
-  {"uids", getUIDs},
-  {"files", getFiles},
-  {NULL, NULL}
-};
-
-/* *************************** */
-
-static const struct luaL_Reg itk_short_meths[] = { interFuncs(short) };
-
-static const struct luaL_Reg itk_ushort_meths[] = { interFuncs(ushort) };
-
-static const struct luaL_Reg itk_int_meths[] = { interFuncs(int) };
-
-static const struct luaL_Reg itk_float_meths[] = { interFuncs(float) };
-
-static const struct luaL_Reg itk_double_meths[] = { interFuncs(double) };
-
-////////////////////////////
-
-int luaopen_litk (lua_State *L) {
-  // short
-  metaTable(short);
-  // unsigned short
-  metaTable(ushort);
-  // int
-  metaTable(int);
-  // float
-  metaTable(float);
-  // double
-  metaTable(double);
-  // Names Generator
-  luaL_newmetatable(L, "caap.itk.gdcm.namesGenerator");
-  lua_pushvalue(L, -1);
-  lua_setfield(L, -1, "__index");
-  luaL_setfuncs(L, gdcm_meths, 0);
-
-  // create the library
-  luaL_newlib(L, itk_funcs);
-  return 1;
-}
-
-
-#ifdef __cplusplus
-}
-#endif
