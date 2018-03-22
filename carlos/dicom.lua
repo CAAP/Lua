@@ -46,6 +46,10 @@ tags.all = {
 	      	{0x0028, 0x0030, 'resolution', 'TEXT'}, -- resolution: dx, dy
 }
 
+tags.keys = {'itype', 'date', 'mdty', 'stdy', 'desc', 'pid', 'thick', 'tr', 'te', 'bo', 'space', 'prot', 'mat', 'ppos', 'oid', 'uid', 'srs', 'num', 'ipp', 'iop', 'rows', 'cols', 'resol'}
+
+fd.reduce( tags.keys, function(k, i) tags[k] = tags.all[i] end )
+
 tags.confidential = {
 		{0x0008, 0x0014, 'iUID', 'TEXT'}, -- Instance Creator UID
 		{0x0008, 0x0018, 'sUID', 'TEXT'}, -- SOP Instance UID
@@ -98,8 +102,6 @@ tags.confidential = {
 		{0x3006, 0x00C2, 'qFoR_UID', 'TEXT'} -- Related Frame of Reference UID
 }
 
-tags.keys = {'itype', 'date', 'mdty', 'stdy', 'desc', 'pid', 'thick', 'tr', 'te', 'bo', 'space', 'prot', 'mat', 'ppos', 'oid', 'uid', 'srs', 'num', 'ipp', 'iop', 'rows', 'cols', 'resol'}
-
 --tr.reduce( tags.keys, function(a,k,i) a[k] = tags.all[i] end, tags )
 fd.reduce( tags.keys, function(k, i) tags[k] = tags.all[i] end )
 
@@ -139,7 +141,7 @@ M.cosines = cosines
 
 function M.schema( what )
     local ret = {'CREATE TABLE IF NOT EXISTS %q (path TEXT'}
-    fd.reduce( what, function(x) ret[#ret+1] = x[3]..' '..x[4] end )
+    fd.reduce( what, function(x) if x[4] ~= 'SEQUENCE' then ret[#ret+1] = x[3]..' '..x[4] end end )
     ret[#ret] = ret[#ret] .. ')'
     return table.concat( ret, ', ' )
 end
