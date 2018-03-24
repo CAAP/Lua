@@ -16,6 +16,51 @@
 #define catchMe(L) catch (itk::ExceptionObject &ex) { lua_pushnil(L); lua_pushfstring(L, "Exception found: %s\n", ex); return 2; }
 
 
+/*
+template <class TImage>
+typename TImage::Pointer MakeNewImage(typename TImage::Pointer image1, typename TImage::PixelType initval) {
+  typedef itk::ImageRegionIteratorWithIndex<TImage> Iterator;
+  typename TImage::Pointer varimage = AllocImage<TImage>(image1);
+  Iterator vfIter2( varimage,  varimage->GetLargestPossibleRegion() );
+  for(  vfIter2.GoToBegin(); !vfIter2.IsAtEnd(); ++vfIter2 )
+    {
+    if( initval >= 0 )
+      {
+      vfIter2.Set(initval);
+      }
+    else
+      {
+      vfIter2.Set(image1->GetPixel(vfIter2.GetIndex() ) );
+      }
+    }
+
+  return varimage;
+}
+*/
+
+template <typename ImageType>
+typename ImageType::Pointer readImage(const char* fname) {
+  // Read the image files begin
+  typedef itk::ImageFileReader<ImageType> ImageFileReader;
+
+  typename ImageFileReader::Pointer reader = ImageFileReader::New();
+  reader->SetFileName( fname );
+  try
+    {
+    reader->Update();
+    }
+  catch( itk::ExceptionObject & e )
+    {
+    std::cerr << "Exception caught during image reference file reading " << std::endl;
+    std::cerr << e << std::endl;
+    return NULL;
+    }
+
+  typename ImageType::Pointer target = reader->GetOutput();
+
+  return target;
+}
+
 template<typename TImage>
 int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) {
     typedef itk::ImageFileWriter<TImage> WriterType;
@@ -31,6 +76,7 @@ int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) 
 
     try {
 	writer->SetInput( input );
+//	writer->SetUseCompression( true );
 	writer->Update();
     } catchMe(L)
 
@@ -56,6 +102,104 @@ int imageIOGDCM(lua_State *L, std::vector<std::string> fileNames, const char *pa
     return writeImage<TImage>(L, reader->GetOutput(), path);
 }
 
+/*
+template<typename ImageType>
+void preprocess(ImageType::Pointer inputImage, typename ImageType::PixelType lower, typename ImageType::PixelType upper, float lowerQuantile, float upperQuantile, ImageType::Pointer histogramMatch) {
+  typedef itk::Statistics::ImageToHistogramFilter<ImageType>   HistogramFilterType;
+  typedef typename HistogramFilterType::InputBooleanObjectType InputBooleanObjectType;
+  typedef typename HistogramFilterType::HistogramSizeType      HistogramSizeType;
+
+  HistogramSizeType histogramSize( 1 );
+  histogramSize[0] = 256;
+
+  typename InputBooleanObjectType::Pointer autoMinMaxInputObject = InputBooleanObjectType::New();
+  autoMinMaxInputObject->Set( true );
+
+  typename HistogramFilterType::Pointer histogramFilter = HistogramFilterType::New();
+  histogramFilter->SetInput( inputImage );
+  histogramFilter->SetAutoMinimumMaximumInput( autoMinMaxInputObject );
+  histogramFilter->SetHistogramSize( histogramSize );
+  histogramFilter->SetMarginalScale( 10.0 );
+  histogramFilter->Update();
+
+  float lowerFunction = histogramFilter->GetOutput()->Quantile( 0, lowerQuantile );
+  float upperFunction = histogramFilter->GetOutput()->Quantile( 0, upperQuantile );
+  typedef itk::IntensityWindowingImageFilter<ImageType, ImageType> IntensityWindowingImageFilterType;
+
+  typename IntensityWindowingImageFilterType::Pointer windowingFilter = IntensityWindowingImageFilterType::New();
+  windowingFilter->SetInput( inputImage );
+  windowingFilter->SetWindowMinimum( lowerFunction );
+  windowingFilter->SetWindowMaximum( upperFunction );
+  windowingFilter->SetOutputMinimum( lower );
+  windowingFilter->SetOutputMaximum( upper );
+  windowingFilter->Update();
+
+  typename ImageType::Pointer outputImage;
+  if( histogramMatch ) {
+    typedef itk::HistogramMatchingImageFilter<ImageType, ImageType> HistogramMatchingFilterType;
+    typename HistogramMatchingFilterType::Pointer matchingFilter = HistogramMatchingFilterType::New();
+    matchingFilter->SetSourceImage( windowingFilter->GetOutput() );
+    matchingFilter->SetReferenceImage( histogramMatch );
+    matchingFilter->SetNumberOfHistogramLevels( 256 );
+    matchingFilter->SetNumberOfMatchPoints( 12 );
+    matchingFilter->ThresholdAtMeanIntensityOn();
+    matchingFilter->Update();
+
+    outputImage = matchingFilter->GetOutput();
+    outputImage->Update();
+
+    typedef itk::MinimumMaximumImageCalculator<ImageType> CalculatorType;
+    typename CalculatorType::Pointer calc = CalculatorType::New();
+    calc->SetImage( inputImage );
+    calc->ComputeMaximum();
+    calc->ComputeMinimum();
+    if( vnl_math_abs( calc->GetMaximum() - calc->GetMinimum() ) < 1.e-9 )
+      return histogramMatch;
+  }
+  else
+    {
+    outputImage = windowingFilter->GetOutput();
+    outputImage->Update();
+    }
+  return outputImage; // XXX
+}
+*/
+/*
+template <typename ImageType>
+template <typename OutImageType>
+void AverageTimeImages(typename TImageIn::Pointer image_in,  typename TImageOut::Pointer image_avg, std::vector<unsigned int> timelist) {
+  enum { ImageDimension = ImageType::ImageDimension };
+  typedef itk::ImageRegionIteratorWithIndex<OutImageType> Iterator;
+  image_avg->FillBuffer(0);
+  unsigned int timedims = image_in->GetLargestPossibleRegion().GetSize()[ImageDimension - 1];
+  if( timelist.empty() )
+    {
+    for( unsigned int timedim = 0; timedim < timedims; timedim++ )
+      {
+      timelist.push_back(timedim);
+      }
+    }
+  Iterator vfIter2(  image_avg, image_avg->GetLargestPossibleRegion() );
+  for(  vfIter2.GoToBegin(); !vfIter2.IsAtEnd(); ++vfIter2 )
+    {
+    typename OutImageType::PixelType  fval = 0;
+    typename ImageType::IndexType ind;
+    typename OutImageType::IndexType spind = vfIter2.GetIndex();
+    for( unsigned int xx = 0; xx < timelist.size(); xx++ )
+      {
+      for( unsigned int yy = 0; yy < ImageDimension - 1; yy++ )
+        {
+        ind[yy] = spind[yy];
+        }
+      ind[ImageDimension - 1] = timelist[xx];
+      fval += image_in->GetPixel(ind);
+      }
+    fval /= (double)timelist.size();
+    image_avg->SetPixel(spind, fval);
+    }
+  return;
+}
+*/
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,6 +219,8 @@ static int getInfo(lua_State *L) {
     lua_newtable(L);
     lua_pushinteger(L, dims);
     lua_setfield(L, -2, "dims");
+    lua_pushinteger(L, imageIO->GetNumberOfComponents());
+    lua_setfield(L, -2, "comps");
     lua_pushstring(L, imageIO->GetComponentTypeAsString(type).c_str());
     lua_setfield(L, -2, "type");
     lua_pushinteger(L, type);
@@ -85,6 +231,14 @@ static int getInfo(lua_State *L) {
     lua_setfield(L, -2, "order"); // Little/Big Endian
     lua_pushinteger(L, imageIO->GetImageSizeInBytes());
     lua_setfield(L, -2, "size");
+
+    // Dimensions
+    lua_newtable(L);
+    for(k=0; k<dims;) {
+	lua_pushinteger(L, imageIO->GetDimensions(k));
+	lua_rawseti(L, -2, ++k);
+    }
+    lua_setfield(L, -2, "bounds");
 
     // Origin, spacing & [direction XXX]
     lua_newtable(L); // origin (-5) | (-3)
@@ -139,6 +293,27 @@ static int dicomSeries(lua_State *L) {
 	    return 2;
     }
 }
+
+
+/// average image series [normalize by average global mean value]
+static int averageImages() {
+    luaL_checktype(L, 1, LUA_TTABLE);
+    const int j = luaL_checkinteger(L, 2); // index of image with maxSize
+
+    typedef float PixelType;
+    typedef itk::Image<PixelType, 3> ImageType;
+    typedef itk::ImageRegionIteratorWithIndex<ImageType> Iterator;
+    typename ImageType::Pointer average;
+
+    {
+    lua_rawgeti(L, 1, j);
+    char *fname = lua_tostring(L, -1);
+    average = readImage<ImageType>( fname );
+    PixelType meanval = 0;
+    }
+
+}
+
 
 //------------------------//
 
