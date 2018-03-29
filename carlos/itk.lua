@@ -7,11 +7,10 @@ local ipairs = ipairs
 local pairs = pairs
 local print = print
 local string = string
+local table = table
 
 local fd = require'carlos.fold'
-
-local litk = require'litk'
-
+local itk = require'litk'
 
 -- No more external access after this point
 _ENV = nil -- or M
@@ -23,27 +22,49 @@ _ENV = nil -- or M
 -- Local function definitions --
 --------------------------------
 
-local function dicoms(vfs, i)
-print('Processing file path: ', vfs[1])
-    local img = litk.ushortNew()
-print('Image container created successfully.')
-    img:dicom(vfs)
-print('Dicom files imported successfully.')
-    local p = string.format("%05d.vtk", i)
-print(p, '\n')
-    img:write(p)
+local function maxBounds( a )
+    a.max = a.bounds
+    a.idx = 1
+    return function( v, i )
+	fd.reduce(v.bounds, function(x,j) if x > a.max[j] then a.max[j] = x; a.idx = i end end)
+    end
 end
+
+local function byBounds(a, b)
+    local u = a.bounds
+    local v = b.bounds
+    u[0] = u[1]
+    v[1] = v[1]
+    return u[1] > v[1] or fd.any(u, function(x,i) return u[i-1] == v[i-1] and x > v[i] end)
+end
+
+local function eqBounds(u, v) return fd.any(u, function(x,i) return x ~= u[i] end) end
 
 ---------------------------------
 -- Public function definitions --
 ---------------------------------
 
-function M.dcmSeries( path )
-    local ss = litk.series( path )
-    local uids = ss:uids()
-    local fs = fd.reduce( uids, fd.map(function(s) return ss:files(s) end), fd.filter(function(v) return #v > 10 end), fd.into, {} )
-    local ps = fd.reduce( fs, fd.map(function(v) return litk.pixelType(v[1]) end), fd.into, {} )
-    fd.reduce( fs, function(vfs,j) if ps[j] == 'ushort' then dicoms(vfs,j) end end )
+function M.dcmSeries( data, path, f )
+print('\nConverting series', data[1].series_desc)
+print('Transforming',  #data ,'files.\n')
+    local info = itk.info(data[1].path)
+    local fs = fd.reduce(data, fd.map(function(x) return x.path end), fd.into, {})
+print('Trying pixel type ', info.type, '\n')
+    if f then f(path) end
+    return itk.dcmSeries(info.ctype, fs, path)
+end
+
+function M.average(paths, outpath, normp)
+print('Averaging', #paths, 'files.\n')
+    local infos = fd.reduce(paths, fd.map(itk.info), fd.into, {})
+    table.sort(infos, byBounds) -- index of image with maximum bounds is 1
+    local mx = infos[1].bounds
+print('Bounds are (', table.concat(mx, ', '), ').\n')
+    local _,rix = fd.first(infos, function(a) return eqBounds(mx, a.bounds) end) -- resampling index
+    if rix then print('There are', #paths - rix + 1, 'elements with different bounds!\n') end
+print('Averaging image, output will be written to', outpath, '\n')
+    return itk.average(paths, 1, normp or false, outpath, rix or  0)
 end
 
 return M
+

@@ -14,7 +14,7 @@ file(GLOB SNOWBALL
 add_library(lstem SHARED lstem.c ${SNOWBALL})
 
 find_library(LUA_LIBRARY
-    NAMES lua53)
+    NAMES lua)
 
 if(LUA_LIBRARY)
     target_link_libraries(lstem ${LUA_LIBRARY})

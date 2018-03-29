@@ -6,6 +6,8 @@
 #include "itkGDCMImageIO.h"
 #include "itkGDCMSeriesFileNames.h"
 #include "itkImageSeriesReader.h"
+#include "itkResampleImageFilter.h"
+#include "itkLaplacianSharpeningImageFilter.h"
 
 
 #include <lua.hpp>
@@ -13,7 +15,7 @@
 #include <string.h>
 
 
-#define catchMe(L) catch (itk::ExceptionObject &ex) { lua_pushnil(L); lua_pushfstring(L, "Exception found: %s\n", ex); return 2; }
+#define catchMe(L) catch (itk::ExceptionObject &ex) { lua_pushnil(L); lua_pushfstring(L, "Exception found: %s\n", ex.what()); return 2; }
 
 
 /*
@@ -57,9 +59,32 @@ typename ImageType::Pointer readImage(const char* fname) {
     }
 
   typename ImageType::Pointer target = reader->GetOutput();
-
   return target;
 }
+
+template <typename ImageType>
+typename ImageType::Pointer resampleImage(const char* fname, typename ImageType::Pointer model) {
+    typedef itk::ResampleImageFilter<ImageType, ImageType, float> ResamplerType;
+    typename ResamplerType::Pointer resampler = ResamplerType::New();
+
+    typename ImageType::Pointer orig = readImage<ImageType>( fname );
+    resampler->SetInput( orig );
+    resampler->SetOutputParametersFromImage( model );
+   try
+    {
+    resampler->Update();
+    }
+  catch( itk::ExceptionObject & e )
+    {
+    std::cerr << "Exception caught during image reference file reading " << std::endl;
+    std::cerr << e << std::endl;
+    return NULL;
+    }
+
+    typename ImageType::Pointer target = resampler->GetOutput();
+    return target;
+}
+ 
 
 template<typename TImage>
 int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) {
@@ -101,6 +126,37 @@ int imageIOGDCM(lua_State *L, std::vector<std::string> fileNames, const char *pa
 
     return writeImage<TImage>(L, reader->GetOutput(), path);
 }
+
+template<typename MetricType>
+template<typename ImageType>
+typename MetricType::Pointer newmetric() {
+    typedef itk::ANTSNeighborhoodCorrelationImageToImageMetricv4<ImageType, ImageType> CorrelationMetricType;
+    typename CorrelationMetricType::Pointer correlationMetric = CorrelationMetricType::New();
+    typename CorrelationMetricType::RadiusType radius;
+    radius.Fill( radiusOption );
+    correlationMetric->SetRadius( radius );
+    correlationMetric->SetUseMovingImageGradientFilter( false );
+    correlationMetric->SetUseFixedImageGradientFilter( false );
+    return correlationMetric;
+
+    typedef itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType> MutualInformationMetricType;
+    typename MutualInformationMetricType::Pointer mutualInformationMetric = MutualInformationMetricType::New();
+    mutualInformationMetric->SetNumberOfHistogramBins( bins );
+    mutualInformationMetric->SetUseMovingImageGradientFilter( false );
+    mutualInformationMetric->SetUseFixedImageGradientFilter( false );
+
+    return mutualInformationMetric;
+
+    typedef itk::MeanSquaresImageToImageMetricv4<ImageType, ImageType> DemonsMetricType;
+    typename DemonsMetricType::Pointer demonsMetric = DemonsMetricType::New();
+    return demonsMetric;
+
+    typedef itk::CorrelationImageToImageMetricv4<ImageType, ImageType> corrMetricType;
+    typename corrMetricType::Pointer corrMetric = corrMetricType::New();
+    return corrMetric;
+}
+
+
 
 /*
 template<typename ImageType>
@@ -206,6 +262,12 @@ extern "C" {
 #endif
 
 
+const char* checkpath(lua_State *L, int k) {
+    lua_rawgeti(L, 1, k);
+    return lua_tostring(L, -1);
+}
+
+
 // Inspect IMAGEs
 
 static int getInfo(lua_State *L) {
@@ -294,24 +356,64 @@ static int dicomSeries(lua_State *L) {
     }
 }
 
-
 /// average image series [normalize by average global mean value]
-static int averageImages() {
-    luaL_checktype(L, 1, LUA_TTABLE);
-    const int j = luaL_checkinteger(L, 2); // index of image with maxSize
+static int averageImages(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE); // images (paths)
+    const int norm = lua_toboolean(L, 3); // normalize values
+    const char *outpath = luaL_checkstring(L, 4); // output path name
+    const int thresh = lua_tointeger(L, 5); // index of images for resampling
 
-    typedef float PixelType;
+    const float numberofimages = (float)luaL_len(L, 1);
+    unsigned int j = 1;
+
+    typedef float PixelType; // pixel type is float by default
     typedef itk::Image<PixelType, 3> ImageType;
     typedef itk::ImageRegionIteratorWithIndex<ImageType> Iterator;
     typename ImageType::Pointer average;
-
-    {
-    lua_rawgeti(L, 1, j);
-    char *fname = lua_tostring(L, -1);
-    average = readImage<ImageType>( fname );
     PixelType meanval = 0;
+
+    average = readImage<ImageType>( checkpath(L, luaL_checkinteger(L, 2)) ); //index of image w maxSize
+    average->FillBuffer( meanval );
+    lua_pop(L, 1); // pop 'path' from stack
+
+    for (j = 1; j < numberofimages; j++) {
+	typename ImageType::Pointer img;
+	if ((j-thresh) < 0)
+	    img = resampleImage<ImageType>(checkpath(L, j), average);
+	else
+	    img = readImage<ImageType>(checkpath(L, j));
+	lua_pop(L, 1); // pop 'path' from stack
+	Iterator vfIter( img, img->GetLargestPossibleRegion() );
+	unsigned long ct = 0;
+
+	if (norm) {
+	    meanval = 0;
+	    for( vfIter.GoToBegin(); !vfIter.IsAtEnd(); ++vfIter, ++ct )
+		meanval += img->GetPixel( vfIter.GetIndex() );
+	    if (ct > 0)
+		meanval /= (float)ct;
+	    if (meanval <= 0)
+		meanval = (1);
+	}
+
+	for( vfIter.GoToBegin(); !vfIter.IsAtEnd(); ++vfIter ) {
+	    PixelType val = vfIter.Get();
+	    if (norm)
+		val /= meanval;
+	    val = val / (float)numberofimages;
+	    const PixelType & oldval = average->GetPixel(vfIter.GetIndex());
+	    average->SetPixel(vfIter.GetIndex(), val+oldval);
+	}
     }
 
+    if (norm) {
+	typedef itk::LaplacianSharpeningImageFilter<ImageType, ImageType> SharpeningFilter;
+	typename SharpeningFilter::Pointer shFilter = SharpeningFilter::New();
+	shFilter->SetInput(average);
+	return  writeImage<ImageType>(L, shFilter->GetOutput(), outpath);
+    }
+
+    return writeImage<ImageType>(L, average, outpath);
 }
 
 
@@ -321,7 +423,6 @@ static int averageImages() {
 
 ////////// Interface METHODs ///////////
 
-#define checkgen(L, i, T) *(T *)luaL_checkudata(L, i, "caap.itk.gdcm.namesGenerator")
 
 // 3D Image Volume
 
@@ -333,7 +434,8 @@ static int averageImages() {
 
 static const struct luaL_Reg itk_funcs[] = {
   {"info", getInfo},
-  {"series", dicomSeries},
+  {"dcmSeries", dicomSeries},
+  {"average", averageImages},
   {NULL, NULL}
 };
 

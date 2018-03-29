@@ -126,6 +126,9 @@ function M.times(k, ... ) local _f, _a = comp{...}; for i=1,k do _f(i) end; retu
 
 function M.any( m, ... ) local _f = fcomp{...}; for i,x in state(m) do if _f(x, i) then return true end end end
 
+-- all := not(any)
+--function M.all( m, ... ) local _f = fcomp{...}; for i,x in state(m) do if not(_f(x, i)) then return true end end end
+
 function M.first( m, ... ) local _f = fcomp{...}; for i,x in state(m) do if _f(x, i) then return x, i end end end
 
 function M.slice( k, m, ... )
