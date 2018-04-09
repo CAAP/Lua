@@ -6,10 +6,12 @@
 #include "itkGDCMImageIO.h"
 #include "itkGDCMSeriesFileNames.h"
 #include "itkImageSeriesReader.h"
+#include "itkNiftiImageIO.h"
 
 #include "itkResampleImageFilter.h"
 #include "itkLaplacianSharpeningImageFilter.h"
 
+#include "itkANTSNeighborhoodCorrelationImageToImageMetricv4.h"
 #include "itkImageRegistrationMethodv4.h"
 #include "itkSyNImageRegistrationMethod.h"
 #include "itkDisplacementFieldTransform.h"
@@ -31,49 +33,89 @@
 #include <lauxlib.h>
 #include <string.h>
 
-
 #define catchMe(L) catch (itk::ExceptionObject &ex) { lua_pushnil(L); lua_pushfstring(L, "Exception found: %s\n", ex.what()); return 2; }
 
 typedef double RealType;
-typedef 3 ImageDimension;
-typedef itk::AffineTransform<RealType, ImageDimension> AffineTransformType;
 
-typedef struct Origin {
+typedef itk::AffineTransform<RealType, 3> AffineTransformType;
+
+struct Origin {
     AffineTransformType offset;
-    itk::Point<RealType, ImageDimension> center;
+    itk::Point<RealType, 3> center;
 };
 
-template<typename ImageType, MetricType>
+template<typename ImageType, typename MetricType>
 typename MetricType::Pointer newmetric(const char *mymetric, unsigned int radiusValue, unsigned int bins) {
     if (strcmp(mymetric, "cc") == 0) {
-	typedef typename itk::ANTSNeighborhoodCorrelationImageToImageMetricv4<ImageType, ImageType> CorrelationMetricType;
-	typename CorrelationMetricType::Pointer correlationMetric = CorrelationMetricType::New();
-	typename CorrelationMetricType::RadiusType radius;
-	radius.Fill( radiusValue );
-	correlationMetric->SetRadius( radius );
-	correlationMetric->SetUseMovingImageGradientFilter( false );
-	correlationMetric->SetUseFixedImageGradientFilter( false );
-	return correlationMetric;
+    	  typedef typename itk::ANTSNeighborhoodCorrelationImageToImageMetricv4<ImageType, ImageType> CorrelationMetricType;
+    	  typename CorrelationMetricType::Pointer correlationMetric = CorrelationMetricType::New();
+    	  typename CorrelationMetricType::RadiusType radius;
+    	  radius.Fill( radiusValue );
+    	  correlationMetric->SetRadius( radius );
+    	  correlationMetric->SetUseMovingImageGradientFilter( false );
+    	  correlationMetric->SetUseFixedImageGradientFilter( false );
+    	  return correlationMetric;
     }
     else if (strcmp(mymetric, "mi") == 0) {
-	typedef typename itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType> MutualInformationMetricType;
-	MutualInformationMetricType::Pointer mutualInformationMetric = MutualInformationMetricType::New();
-	mutualInformationMetric->SetNumberOfHistogramBins( bins );
-	mutualInformationMetric->SetUseMovingImageGradientFilter( false );
-	mutualInformationMetric->SetUseFixedImageGradientFilter( false );
-	return mutualInformationMetric;
+    	  typedef typename itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType> MutualInformationMetricType;
+    	  typename MutualInformationMetricType::Pointer mutualInformationMetric = MutualInformationMetricType::New();
+    	  mutualInformationMetric->SetNumberOfHistogramBins( bins );
+    	  mutualInformationMetric->SetUseMovingImageGradientFilter( false );
+    	  mutualInformationMetric->SetUseFixedImageGradientFilter( false );
+    	  return mutualInformationMetric;
     }
     else if (strcmp(mymetric, "ms") == 0) {
-	typedef typename itk::MeanSquaresImageToImageMetricv4<ImageType, ImageType> MeanSquaresMetricType;
-	return MeanSquaresMetricType::New();
+    	  typedef typename itk::MeanSquaresImageToImageMetricv4<ImageType, ImageType> MeanSquaresMetricType;
+    	  return MeanSquaresMetricType::New();
     }
     else if (strcmp(mymetric, "gc") == 0) {
-	typedef typename itk::CorrelationImageToImageMetricv4<ImageType, ImageType> CorrMetricType;
-	return CorrMetricType::New();
+    	  typedef typename itk::CorrelationImageToImageMetricv4<ImageType, ImageType> CorrMetricType;
+    	  return CorrMetricType::New();
     } else {
-	typename MetricType::Pointer ret = NULL;
-	return ret;
+    	  return ITK_NULLPTR;
     }
+}
+
+template<typename ImageType, typename RegistrationType>
+typename RegistrationType::Pointer registerImage() { 
+
+  typedef itk::ImageRegistrationMethodv4<FixedImageType, FixedImageType, AffineTransformType> AffineRegistrationType;
+
+        typename AffineRegistrationType::Pointer affineRegistration = AffineRegistrationType::New();
+        typename AffineTransformType::Pointer affineTransform = AffineTransformType::New();
+        affineTransform->SetIdentity();
+        affineTransform->SetOffset( trans );
+        affineTransform->SetCenter( trans2 );
+        nparams = affineTransform->GetNumberOfParameters() + 2;
+        metric->SetFixedImage( preprocessFixedImage );
+        metric->SetVirtualDomainFromImage( preprocessFixedImage );
+        metric->SetMovingImage( preprocessMovingImage );
+        metric->SetMovingTransform( affineTransform );
+        typename ScalesEstimatorType::ScalesType scales(affineTransform->GetNumberOfParameters() );
+        typename MetricType::ParametersType      newparams(  affineTransform->GetParameters() );
+        metric->SetParameters( newparams );
+        metric->Initialize();
+        scalesEstimator->SetMetric(metric);
+        scalesEstimator->EstimateScales(scales);
+        optimizer->SetScales(scales);
+        if( compositeTransform->GetNumberOfTransforms() > 0 )
+          {
+          affineRegistration->SetMovingInitialTransform( compositeTransform );
+          }
+        affineRegistration->SetFixedImage( preprocessFixedImage );
+        affineRegistration->SetMovingImage( preprocessMovingImage );
+        affineRegistration->SetNumberOfLevels( numberOfLevels );
+        affineRegistration->SetShrinkFactorsPerLevel( shrinkFactorsPerLevel );
+        affineRegistration->SetSmoothingSigmasPerLevel( smoothingSigmasPerLevel );
+        affineRegistration->SetMetricSamplingStrategy( metricSamplingStrategy );
+        affineRegistration->SetMetricSamplingPercentage( samplingPercentage );
+        affineRegistration->SetMetric( metric );
+        affineRegistration->SetOptimizer( optimizer );
+
+	try {
+	    affineRegistration->Update();
+	}
+
 }
 
 template <typename FixedImageType, typename MovingImageType>
@@ -95,8 +137,8 @@ Origin initMoments(typename FixedImageType::Pointer fixed_image, typename Moving
     } catch ( ... ) {}
 
     typename AffineTransformType::OffsetType trans;
-    itk::Point<RealType, ImageDimension> trans2;
-    for( unsigned int i = 0; i < ImageDimension; i++ ) {
+    itk::Point<RealType, 3> trans2;
+    for( unsigned int i = 0; i < 3; i++ ) {
 	trans[i] = moving_center[i] - fixed_center[1];
 	trans2[i] = fixed_center[i];
     }
@@ -109,15 +151,21 @@ Origin initMoments(typename FixedImageType::Pointer fixed_image, typename Moving
 
 template <typename ImageType>
 typename ImageType::Pointer readImage(const char* fname) {
-    if (fname == NULL) {
-	typename ImageType::Pointer ret = NULL;
-	return ret;
-    }
+    if (fname == NULL)
+    	  return ITK_NULLPTR;
+
   // Read the image files begin
-  typedef itk::ImageFileReader<ImageType> ImageFileReader;
+    typedef itk::ImageFileReader<ImageType> ImageFileReader;
 
   typename ImageFileReader::Pointer reader = ImageFileReader::New();
   reader->SetFileName( fname );
+    const char *ext = strrchr(fname, '.');
+    if (!(strcmp(ext, ".nii") && strcmp(ext, ".nii.gz"))) {
+    	  typedef itk::NiftiImageIO ImageIOType;
+    	  typename ImageIOType::Pointer niiIO = ImageIOType::New();
+    	  reader->SetImageIO( niiIO );
+    }
+
   try
     {
     reader->Update();
@@ -126,13 +174,35 @@ typename ImageType::Pointer readImage(const char* fname) {
     {
     std::cerr << "Exception caught during image reference file reading " << std::endl;
     std::cerr << e << std::endl;
-    return NULL;
+	typename ImageType::Pointer ret;
+	return ret;
     }
 
-  typename ImageType::Pointer target = reader->GetOutput();
-  return target;
+  return reader->GetOutput();
 }
 
+template <typename ImageType>
+typename ImageType::Pointer resampleImage(const char* fname, typename ImageType::Pointer model) {
+    typedef itk::ResampleImageFilter<ImageType, ImageType, float> ResamplerType;
+    typename ResamplerType::Pointer resampler = ResamplerType::New();
+
+    typename ImageType::Pointer orig = readImage<ImageType>( fname );
+    resampler->SetInput( orig );
+    resampler->SetOutputParametersFromImage( model );
+   try
+    {
+    resampler->Update();
+    }
+  catch( itk::ExceptionObject & e )
+    {
+    std::cerr << "Exception caught during image reference file reading " << std::endl;
+    std::cerr << e << std::endl;
+	typename ImageType::Pointer ret;
+	return ret;
+    }
+
+    return resampler->GetOutput();
+}
 
 template<typename TImage>
 int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) {
@@ -142,9 +212,14 @@ int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) 
 
     const char *ext = strrchr(fname, '.');
     if (!(strcmp(ext, ".vtk") && strcmp(ext, ".VTK"))) {
-	typedef itk::VTKImageIO ImageIOType;
-	typename ImageIOType::Pointer vtkIO = ImageIOType::New();
-	writer->SetImageIO( vtkIO );
+    	  typedef itk::VTKImageIO ImageIOType;
+    	  typename ImageIOType::Pointer vtkIO = ImageIOType::New();
+    	  writer->SetImageIO( vtkIO );
+    }
+    else if (!(strcmp(ext, "nii.") && strcmp(ext, ".nii.gz"))) {
+    	  typedef itk::NiftiImageIO ImageIOType;
+    	  typename ImageIOType::Pointer niiIO = ImageIOType::New();
+    	  writer->SetImageIO( niiIO );
     }
 
     try {
@@ -159,7 +234,7 @@ int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) 
 
 template<typename TScalar>
 int imageIOGDCM(lua_State *L, std::vector<std::string> fileNames, const char *path) {
-    typedef itk::Image<TScalar, ImageDimension> TImage;
+    typedef itk::Image<TScalar, 3> TImage;
     typedef itk::ImageSeriesReader<TImage> ReaderType;
     typename ReaderType::Pointer reader = ReaderType::New();
 
@@ -344,7 +419,7 @@ static int preprocessImage(lua_State *L) {
     const char *match = lua_tostring(L, 3);
 
     typedef float PixelType; // pixel type is float by default
-    typedef itk::Image<PixelType, ImageDimension> ImageType;
+    typedef itk::Image<PixelType, 3> ImageType;
 
     ImageType::Pointer ret = preprocess<ImageType>(readImage<ImageType>(path), 0, 1, 0.001, 0.999, readImage<ImageType>(match));
     return writeImage<ImageType>(L, ret, outpath);
@@ -361,7 +436,7 @@ static int averageImages(lua_State *L) {
     unsigned int j = 1;
 
     typedef float PixelType; // pixel type is float by default
-    typedef itk::Image<PixelType, ImageDimension> ImageType;
+    typedef itk::Image<PixelType, 3> ImageType;
     typedef itk::ImageRegionIteratorWithIndex<ImageType> Iterator;
     typename ImageType::Pointer average;
     PixelType meanval = 0;
@@ -483,28 +558,7 @@ typename TImage::Pointer MakeNewImage(typename TImage::Pointer image1, typename 
   return varimage;
 }
 
-template <typename ImageType>
-typename ImageType::Pointer resampleImage(const char* fname, typename ImageType::Pointer model) {
-    typedef itk::ResampleImageFilter<ImageType, ImageType, float> ResamplerType;
-    typename ResamplerType::Pointer resampler = ResamplerType::New();
 
-    typename ImageType::Pointer orig = readImage<ImageType>( fname );
-    resampler->SetInput( orig );
-    resampler->SetOutputParametersFromImage( model );
-   try
-    {
-    resampler->Update();
-    }
-  catch( itk::ExceptionObject & e )
-    {
-    std::cerr << "Exception caught during image reference file reading " << std::endl;
-    std::cerr << e << std::endl;
-    return NULL;
-    }
-
-    typename ImageType::Pointer target = resampler->GetOutput();
-    return target;
-}
 */
 
 
