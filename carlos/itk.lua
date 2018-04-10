@@ -66,5 +66,19 @@ print('Averaging image, output will be written to', outpath, '\n')
     return itk.average(paths, 1, normp or false, outpath, rix or  0)
 end
 
+
+function M.normalize(fixed, moving)
+print('Running ANTS-like normalization script.\n')
+
+print('Transformation used is SyN[1.0].\n')
+print('Regularization used is Gauss[3, 0.5].\n')
+
+    local N = l
+    local levels = math.floor(math.log(N/32, 2)) + 1
+
+print('Iterations set to', iter, '\n')
+end
+
+
 return M
 
