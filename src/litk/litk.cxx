@@ -35,17 +35,26 @@
 
 #define catchMe(L) catch (itk::ExceptionObject &ex) { lua_pushnil(L); lua_pushfstring(L, "Exception found: %s\n", ex.what()); return 2; }
 
-typedef double RealType;
+typedef float RealType;
+typedef itk::ConjugateGradientLineSearchOptimizerv4 OptimizerType;
 
-typedef itk::AffineTransform<RealType, 3> AffineTransformType;
+template<typename ImageType, unsigned int ImageDimension>
+typename itk::Vector<RealType, ImageDimension> centerOfGravity(typename ImageType::Pointer inputImage) {
+    typedef typename itk::ImageMomentsCalculator<ImageType> ImageCalculatorType;
+    typename ImageCalculatorType::Pointer calc = ImageCalculatorType::New();
+    calc->SetImage( inputImage );
+    typename itk::Vector<RealType, ImageDimension> center;
+    center.Fill(0);
+    try {
+	calc->Compute();
+	center = calc->GetCenterOfGravity();
+    } catch (itk::ExceptionObject &ex) {}
+    return center;
+}
 
-struct Origin {
-    AffineTransformType offset;
-    itk::Point<RealType, 3> center;
-};
 
 template<typename ImageType, typename MetricType>
-typename MetricType::Pointer newmetric(const char *mymetric, unsigned int radiusValue, unsigned int bins) {
+typename MetricType::Pointer newmetric(const char *mymetric, unsigned int radiusOrBins) {
     if (strcmp(mymetric, "cc") == 0) {
     	  typedef typename itk::ANTSNeighborhoodCorrelationImageToImageMetricv4<ImageType, ImageType> CorrelationMetricType;
     	  typename CorrelationMetricType::Pointer correlationMetric = CorrelationMetricType::New();
@@ -76,17 +85,21 @@ typename MetricType::Pointer newmetric(const char *mymetric, unsigned int radius
     }
 }
 
+/*
 template<typename ImageType, typename RegistrationType>
 typename RegistrationType::Pointer registerImage() { 
 
-  typedef itk::ImageRegistrationMethodv4<FixedImageType, FixedImageType, AffineTransformType> AffineRegistrationType;
+    typedef typename itk::ImageToImageMetricv4<ImageType, ImageType> MetricType;
+    typename MetricType::Pointer metric;
+
+  typedef itk::ImageRegistrationMethodv4<ImageType, ImageType, AffineTransformType> AffineRegistrationType;
 
         typename AffineRegistrationType::Pointer affineRegistration = AffineRegistrationType::New();
         typename AffineTransformType::Pointer affineTransform = AffineTransformType::New();
         affineTransform->SetIdentity();
-        affineTransform->SetOffset( trans );
-        affineTransform->SetCenter( trans2 );
-        nparams = affineTransform->GetNumberOfParameters() + 2;
+//        affineTransform->SetOffset( trans );
+//        affineTransform->SetCenter( trans2 );
+        unsigned int nparams = affineTransform->GetNumberOfParameters() + 2;
         metric->SetFixedImage( preprocessFixedImage );
         metric->SetVirtualDomainFromImage( preprocessFixedImage );
         metric->SetMovingImage( preprocessMovingImage );
@@ -117,37 +130,7 @@ typename RegistrationType::Pointer registerImage() {
 	}
 
 }
-
-template <typename FixedImageType, typename MovingImageType>
-Origin initMoments(typename FixedImageType::Pointer fixed_image, typename MovingImageType::Pointer moving_image) {
-    typedef typename itk::ImageMomentsCalculator<FixedImageType> ImageCalculatorType;
-    typename ImageCalculatorType::Pointer calc1 = ImageCalculatorType::New();
-    typename ImageCalculatorType::Pointer calc2 = ImageCalculatorType::New();
-    calc1->SetImage( fixed_image );
-    calc2->SetImage( moving_image );
-    typename ImageCalculatorType::VectorType fixed_center; fixed_center.Fill(0);
-    typename ImageCalculatorType::VectorType moving_center; moving_center.Fill(0);
-    try {
-	calc1->Compute();
-	fixed_center = calc1->GetCenterOfGravity();
-	try {
-	    calc2->Compute();
-	    moving_center = calc2->GetCenterOfGravity();
-	} catch ( ... ) { fixed_center.Fill(0); }
-    } catch ( ... ) {}
-
-    typename AffineTransformType::OffsetType trans;
-    itk::Point<RealType, 3> trans2;
-    for( unsigned int i = 0; i < 3; i++ ) {
-	trans[i] = moving_center[i] - fixed_center[1];
-	trans2[i] = fixed_center[i];
-    }
-
-    Origin ret;
-    ret.offset = trans;
-    ret.center = trans2;
-    return ret;
-}
+*/
 
 template <typename ImageType>
 typename ImageType::Pointer readImage(const char* fname) {
@@ -183,7 +166,7 @@ typename ImageType::Pointer readImage(const char* fname) {
 
 template <typename ImageType>
 typename ImageType::Pointer resampleImage(const char* fname, typename ImageType::Pointer model) {
-    typedef itk::ResampleImageFilter<ImageType, ImageType, float> ResamplerType;
+    typedef itk::ResampleImageFilter<ImageType, ImageType, RealType> ResamplerType;
     typename ResamplerType::Pointer resampler = ResamplerType::New();
 
     typename ImageType::Pointer orig = readImage<ImageType>( fname );
@@ -385,7 +368,7 @@ static int getInfo(lua_State *L) {
 // input
 // (1) ComponentType [int]
 // (2) FilesInSeries [table]
-// (3) Filename,path [string]
+// (3) OutFilename,path [string]
 static int dicomSeries(lua_State *L) {
     const char *path = luaL_checkstring(L, 3); 
     luaL_checktype(L, 2, LUA_TTABLE);
@@ -418,8 +401,7 @@ static int preprocessImage(lua_State *L) {
     const char *outpath = luaL_checkstring(L, 2);
     const char *match = lua_tostring(L, 3);
 
-    typedef float PixelType; // pixel type is float by default
-    typedef itk::Image<PixelType, 3> ImageType;
+    typedef itk::Image<RealType, 3> ImageType;
 
     ImageType::Pointer ret = preprocess<ImageType>(readImage<ImageType>(path), 0, 1, 0.001, 0.999, readImage<ImageType>(match));
     return writeImage<ImageType>(L, ret, outpath);
@@ -435,10 +417,9 @@ static int averageImages(lua_State *L) {
     const float numberofimages = (float)luaL_len(L, 1);
     unsigned int j = 1;
 
-    typedef float PixelType; // pixel type is float by default
-    typedef itk::Image<PixelType, 3> ImageType;
+    typedef itk::Image<RealType, 3> ImageType;
     typedef itk::ImageRegionIteratorWithIndex<ImageType> Iterator;
-    typename ImageType::Pointer average;
+    ImageType::Pointer average;
     PixelType meanval = 0;
 
     average = readImage<ImageType>( checkpath(L, luaL_checkinteger(L, 2)) ); //index of image w maxSize
@@ -446,7 +427,7 @@ static int averageImages(lua_State *L) {
     lua_pop(L, 1); // pop 'path' from stack
 
     for (j = 1; j < numberofimages; j++) {
-	typename ImageType::Pointer img;
+	ImageType::Pointer img;
 	if ((j-thresh) < 0)
 	    img = resampleImage<ImageType>(checkpath(L, j), average);
 	else
@@ -477,7 +458,7 @@ static int averageImages(lua_State *L) {
 
     if (norm) {
 	typedef itk::LaplacianSharpeningImageFilter<ImageType, ImageType> SharpeningFilter;
-	typename SharpeningFilter::Pointer shFilter = SharpeningFilter::New();
+	SharpeningFilter::Pointer shFilter = SharpeningFilter::New();
 	shFilter->SetInput(average);
 	return  writeImage<ImageType>(L, shFilter->GetOutput(), outpath);
     }
@@ -485,6 +466,77 @@ static int averageImages(lua_State *L) {
     return writeImage<ImageType>(L, average, outpath);
 }
 
+static int registerImages(lua_State *L) {
+    const char *fixedPath = luaL_checkstring(L, 1);
+    const char *movingPath = luaL_checkstring(L, 2);
+    const char *transform = luaL_checkstring(L, 3);
+    const char *metric = luaL_checkstring(L, 4);
+    const unsigned int radiusOrBins = luaL_checkinteger(L, 5);
+
+    unsigned int ImageDimension 3;
+    typedef itk::Image<RealType, ImageDimension> ImageType;
+    typedef itk::ImageToImageMetricv4<ImageType, ImageType> MetricType;
+
+    // Read images
+    ImageType::Pointer fixedImage = readImage<ImageType>( fixedPath );
+    ImageType::Pointer movingImage = readImage>ImageType>( movingPath );
+
+    // Metric
+    MetricType::Pointer metric = newmetric<ImageType, MetricType>(metric, radiusOrBins);
+    metric->SetVirtualDomainFromImage( fixedImage );
+
+    // Optimizer
+    OptimizerType::Pointer optimizer = OptimizerType::New();
+    optimizer->SetNumberOfIterations(); // XXX
+    optimizer->SetMinimumConvergenceValue( 1.0e-7 );
+    optimizer->SetConvergenceWindowSize( 10 );
+    optimizer->SetLowerLimit( 0 );
+    optimizer->SetUpperLimit( 2 );
+    optimizer->SetEpsilon( 0.1 );
+
+    // Normalizaing parameter space; useful during Optimization
+    {
+	typedef itk::RegistrationParameterScalesFromPhysicalShift<MetricType> ScalesEstimatorType;
+	ScalesEstimatorType::Pointer scalesEstimator = ScalesEstimatorType::New();
+	scalesEstimator->SetMetric( metric );
+	scalesEstimator->SetTransformForward( true );
+	optimizer->SetScalesEstimator( scalesEstimator );
+    }
+
+    optimizer->SetMaximumStepSizeInPhysicalUnits(); // XXX
+    optimizer->SetDoEstimateLearningRateOnce(); // XXX
+    optimizer->SetDoEstimateLEarningRateAtEachIteration(); // XXX
+
+    typedef itk::AffineTransform<RealType, ImageDimension> AffineTransformType;
+    typedef itk::ImageRegistrationMethodv4<ImageType, ImageType, AffineTransfromType> AffineRegistrationType;
+    typedef itk::Vector<RealType, ImageDimension> VectorType;
+
+    AffineTransformType::OffsetType offset;
+    itk::Point<RealType, ImageDimension> center;
+    // Initial estimates for registration using an Affine transform
+    {
+	VectorType fixed_center = centerOfGravity<ImageType, ImageDimension>(fixedImage);
+	VectorType moving_center = centerOfGravity<ImageType, ImageDimension>(movingImage);
+	unsigned int i;
+	for(i=0; i<ImageDimension; i++){
+	    offset = moving_center[i] - fixed_center[i];
+	    center = fixed_center[i];
+	}
+    }
+
+    if( strcmp(transform, "affine") == 0 ) {
+	ImageType::Pointer preprocessFixed = preprocess<ImageType>(fixedImage, 0, 1, 0.001, 0.999, ITK_NULLPTR);
+	ImageType::Pointer preprocessMoving = preprocess<ImageType>(movingImage, 0, 1, 0.001, 0.999, ITK_NULLPTR); // preprocessFixed
+
+	AffineRegistrationType::Pointer affineRegistration = AffineRegistrationType::New();
+	AffineTransformType::Pointer affineTransform = AffineTransformType::New();
+	affineTransform->SetIdentity();
+	affineTransform->SetOffset( offset );
+	affineTransform->SetCenter( center );
+
+    }
+
+}
 
 //------------------------//
 
