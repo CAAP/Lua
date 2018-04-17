@@ -11,15 +11,17 @@
 #include <lua.hpp>
 #include <lauxlib.h>
 
-
-template<typename T>
-const char* stringFilter() {
-    Element<T, VM::VM1_n> e;
-    e.Set();
+template<int TVR>
+const char* stringFilter(const gdcm::DataElement &de) {
+    gdcm::Element<TVR, gdcm::VM::VM1_n> e;
+    e.SetFromDataElement( de );
     if (e.GetLength()) {
 //	long l = std::min( (long) e.GetLength(), (long) (0x100 / VR::GetLength( T )) );
 //	e.GetLength should b 1 ONE
-	e.GetValue()
+	return ((char *)e.GetValue());
+    }
+    else {
+	return "";
     }
 }
 
@@ -98,7 +100,7 @@ static int initializeXML() {
 }
 
 int toString(lua_State *L, std::string s) {
-    int N = luaL_len(L, -1) + 1;
+    const int N = luaL_len(L, -1) + 1;
     s.resize( std::min(s.size(), strlen(s.c_str())) );
     if (s.size() == 0)
 	return 0;
@@ -110,12 +112,22 @@ int toString(lua_State *L, std::string s) {
 }
 
 int fromByte(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
-    if (gdcm::VR::SQ == de.GetVR() && !de.IsEmpty()) {
+    const int TVR = de.GetVR();
+    if (gdcm::VR::SQ == TVR && !de.IsEmpty()) {
 	return asSequence(L, de, pt);
     }
+
+    const int N = luaL_len(L, -1) + 1;
+    const char *ans = stringFilter<TVR>( de );
+    if (!lua_stringtonumber(L, ans)) // ADD value/empty string
+	lua_pushstring(L, ans);
+    lua_rawseti(L, -2, N);
+    return 1;
+    /*
     const gdcm::ByteValue *bv = de.GetByteValue();
     std::string s ( (char *)bv->GetPointer(), bv->GetLength());
     return toString(L, s); //  , pt->index+2
+    */
 }
 
 int asSequence(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
