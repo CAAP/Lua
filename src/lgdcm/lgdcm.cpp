@@ -11,6 +11,18 @@
 #include <lua.hpp>
 #include <lauxlib.h>
 
+
+template<typename T>
+const char* stringFilter() {
+    Element<T, VM::VM1_n> e;
+    e.Set();
+    if (e.GetLength()) {
+//	long l = std::min( (long) e.GetLength(), (long) (0x100 / VR::GetLength( T )) );
+//	e.GetLength should b 1 ONE
+	e.GetValue()
+    }
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -102,7 +114,7 @@ int fromByte(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
 	return asSequence(L, de, pt);
     }
     const gdcm::ByteValue *bv = de.GetByteValue();
-    std::string s (bv->GetPointer(), bv->GetLength());
+    std::string s ( (char *)bv->GetPointer(), bv->GetLength());
     return toString(L, s); //  , pt->index+2
 }
 
