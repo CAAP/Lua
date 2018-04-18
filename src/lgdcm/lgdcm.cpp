@@ -11,18 +11,17 @@
 #include <lua.hpp>
 #include <lauxlib.h>
 
-template<int TVR>
-const char* stringFilter(const gdcm::DataElement &de) {
+template<gdcm::VR::VRType TVR>
+std::string stringFilter(const gdcm::DataElement &de) {
+//    typedef typename gdcm::VRToType<TVR>::Type TT;
     gdcm::Element<TVR, gdcm::VM::VM1_n> e;
     e.SetFromDataElement( de );
     if (e.GetLength()) {
 //	long l = std::min( (long) e.GetLength(), (long) (0x100 / VR::GetLength( T )) );
 //	e.GetLength should b 1 ONE
-	return ((char *)e.GetValue());
+	return std::string( "" + e.GetValue() );
     }
-    else {
-	return "";
-    }
+    return std::string( "" );
 }
 
 #ifdef __cplusplus
@@ -117,17 +116,15 @@ int fromByte(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
 	return asSequence(L, de, pt);
     }
 
-    const int N = luaL_len(L, -1) + 1;
-    const char *ans = stringFilter<TVR>( de );
-    if (!lua_stringtonumber(L, ans)) // ADD value/empty string
-	lua_pushstring(L, ans);
-    lua_rawseti(L, -2, N);
-    return 1;
-    /*
+    if (gdcm::VR::US == TVR) {
+	std::string s = stringFilter<gdcm::VR::US>( de );
+	return toString( L, s );
+    }
+
     const gdcm::ByteValue *bv = de.GetByteValue();
-    std::string s ( (char *)bv->GetPointer(), bv->GetLength());
+    std::string s ( (const char *)bv->GetPointer(), bv->GetLength());
     return toString(L, s); //  , pt->index+2
-    */
+
 }
 
 int asSequence(lua_State *L, const gdcm::DataElement &de, Tags *pt) {
