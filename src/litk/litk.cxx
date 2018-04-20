@@ -24,6 +24,8 @@
 #include "itkHistogramMatchingImageFilter.h"
 #include "itkIntensityWindowingImageFilter.h"
 
+#include "itkConjugateGradientLineSearchOptimizerv4.h"
+
 #include "itkAffineTransform.h"
 
 #include "itkHistogramMatchingImageFilter.h"
@@ -59,7 +61,7 @@ typename MetricType::Pointer newmetric(const char *mymetric, unsigned int radius
     	  typedef typename itk::ANTSNeighborhoodCorrelationImageToImageMetricv4<ImageType, ImageType> CorrelationMetricType;
     	  typename CorrelationMetricType::Pointer correlationMetric = CorrelationMetricType::New();
     	  typename CorrelationMetricType::RadiusType radius;
-    	  radius.Fill( radiusValue );
+//    	  radius.Fill( radiusValue );
     	  correlationMetric->SetRadius( radius );
     	  correlationMetric->SetUseMovingImageGradientFilter( false );
     	  correlationMetric->SetUseFixedImageGradientFilter( false );
@@ -68,7 +70,7 @@ typename MetricType::Pointer newmetric(const char *mymetric, unsigned int radius
     else if (strcmp(mymetric, "mi") == 0) {
     	  typedef typename itk::MattesMutualInformationImageToImageMetricv4<ImageType, ImageType> MutualInformationMetricType;
     	  typename MutualInformationMetricType::Pointer mutualInformationMetric = MutualInformationMetricType::New();
-    	  mutualInformationMetric->SetNumberOfHistogramBins( bins );
+//    	  mutualInformationMetric->SetNumberOfHistogramBins( bins );
     	  mutualInformationMetric->SetUseMovingImageGradientFilter( false );
     	  mutualInformationMetric->SetUseFixedImageGradientFilter( false );
     	  return mutualInformationMetric;
@@ -213,6 +215,12 @@ int writeImage(lua_State *L, typename TImage::Pointer input, const char* fname) 
 
     lua_pushboolean(L, 1);
     return 1;
+}
+
+template<typename TScalar>
+int convertImage(lua_State *L, const char *path, const char *outpath) {
+    typedef itk::Image<TScalar, 3> ImageType;
+    return writeImage<ImageType>(L, readImage<ImageType>(path), outpath);
 }
 
 template<typename TScalar>
@@ -407,6 +415,28 @@ static int preprocessImage(lua_State *L) {
     return writeImage<ImageType>(L, ret, outpath);
 }
 
+static int vtk2nii(lua_State *L) {
+    const char *path = luaL_checkstring(L, 1);
+    const char *outpath = luaL_checkstring(L, 2);
+
+    itk::ImageIOBase::Pointer imageIO = itk::ImageIOFactory::CreateImageIO(path, itk::ImageIOFactory::ReadMode);
+    imageIO->SetFileName(path);
+    imageIO->ReadImageInformation();
+    itk::ImageIOBase::IOComponentType type = imageIO->GetComponentType();
+
+    switch(type) {
+	case itk::ImageIOBase::SHORT:   return convertImage<short>(L, path, outpath);		break;
+	case itk::ImageIOBase::USHORT:  return convertImage<unsigned short>(L, path, outpath);  break;
+	case itk::ImageIOBase::INT:	return convertImage<int>(L, path, outpath); 		break;
+	case itk::ImageIOBase::FLOAT:   return convertImage<float>(L, path, outpath); 		break;
+	case itk::ImageIOBase::DOUBLE:  return convertImage<double>(L, path, outpath); 		break;
+	default:
+	    lua_pushnil(L);
+	    lua_pushstring(L, "Error: Unsupported pixel type.\n");
+	    return 2;
+    }
+}
+
 /// average image series [normalize by average global mean value]
 static int averageImages(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE); // images (paths)
@@ -420,7 +450,7 @@ static int averageImages(lua_State *L) {
     typedef itk::Image<RealType, 3> ImageType;
     typedef itk::ImageRegionIteratorWithIndex<ImageType> Iterator;
     ImageType::Pointer average;
-    PixelType meanval = 0;
+    RealType meanval = 0;
 
     average = readImage<ImageType>( checkpath(L, luaL_checkinteger(L, 2)) ); //index of image w maxSize
     average->FillBuffer( meanval );
@@ -447,11 +477,11 @@ static int averageImages(lua_State *L) {
 	}
 
 	for( vfIter.GoToBegin(); !vfIter.IsAtEnd(); ++vfIter ) {
-	    PixelType val = vfIter.Get();
+	    RealType val = vfIter.Get();
 	    if (norm)
 		val /= meanval;
 	    val = val / (float)numberofimages;
-	    const PixelType & oldval = average->GetPixel(vfIter.GetIndex());
+	    const RealType & oldval = average->GetPixel(vfIter.GetIndex());
 	    average->SetPixel(vfIter.GetIndex(), val+oldval);
 	}
     }
@@ -466,6 +496,7 @@ static int averageImages(lua_State *L) {
     return writeImage<ImageType>(L, average, outpath);
 }
 
+/*
 static int registerImages(lua_State *L) {
     const char *fixedPath = luaL_checkstring(L, 1);
     const char *movingPath = luaL_checkstring(L, 2);
@@ -473,7 +504,7 @@ static int registerImages(lua_State *L) {
     const char *metric = luaL_checkstring(L, 4);
     const unsigned int radiusOrBins = luaL_checkinteger(L, 5);
 
-    unsigned int ImageDimension 3;
+    unsigned int ImageDimension = 3;
     typedef itk::Image<RealType, ImageDimension> ImageType;
     typedef itk::ImageToImageMetricv4<ImageType, ImageType> MetricType;
 
@@ -537,6 +568,7 @@ static int registerImages(lua_State *L) {
     }
 
 }
+*/
 
 //------------------------//
 
@@ -558,6 +590,7 @@ static const struct luaL_Reg itk_funcs[] = {
   {"dcmSeries", dicomSeries},
   {"average", averageImages},
   {"preprocess", preprocessImage},
+  {"vtk2nii", vtk2nii},
   {NULL, NULL}
 };
 
