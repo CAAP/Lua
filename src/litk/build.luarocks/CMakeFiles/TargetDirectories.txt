@@ -1,7 +1,0 @@
-/home/carlos/Documentos/Lua/src/litk/build.luarocks/CMakeFiles/install/strip.dir
-/home/carlos/Documentos/Lua/src/litk/build.luarocks/CMakeFiles/edit_cache.dir
-/home/carlos/Documentos/Lua/src/litk/build.luarocks/CMakeFiles/litk.dir
-/home/carlos/Documentos/Lua/src/litk/build.luarocks/CMakeFiles/list_install_components.dir
-/home/carlos/Documentos/Lua/src/litk/build.luarocks/CMakeFiles/install/local.dir
-/home/carlos/Documentos/Lua/src/litk/build.luarocks/CMakeFiles/rebuild_cache.dir
-/home/carlos/Documentos/Lua/src/litk/build.luarocks/CMakeFiles/install.dir
