@@ -1,5 +1,5 @@
 #include <opencv2/opencv.hpp>
-#include <gdcm-2.9/gdcmPixelFormat.h>
+#include <gdcm/gdcmPixelFormat.h>
 
 #include <vector>
 
@@ -113,12 +113,12 @@ static int videoCapture(lua_State *L) {
     cv::VideoCapture cap;
     cap.open( fname );
     if (!cap.isOpened()) luaL_error(L, "Unable to open video file %s", fname);
-//    cap >> frames;
-//    if (frames.empty()) luaL_error(L, "Cannot read data from video source %s", fname);
+    cap >> frames;
+    if (frames.empty()) luaL_error(L, "Cannot read data from video source %s", fname);
 
-/*    cv::Mat **m = newmat(L);
-    *m = new cv::Mat(frames);*/
-    return 0;
+    cv::Mat **m = newmat(L);
+    *m = new cv::Mat(frames);
+    return 1;
 }
 
 static int fromTable(lua_State *L) {

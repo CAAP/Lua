@@ -2,23 +2,12 @@ cmake_minimum_required(VERSION 3.0)
 
 project( LUAOPENCV CXX )
 
-include_directories(${LUA_INC} ${OCV_INC} ${DCM_INC})
+include_directories($ENV{INC_GDCM})
 
 add_library(locv SHARED locv.cpp)
 
 find_library(OCV_LIBRARY
-    NAMES opencv_core opencv_imgcodecs opencv_imgproc opencv_videoio
-    PATHS ${OCV_LIB})
-
-find_library(LUA_LIBRARY
-    NAMES liblua.a
-    PATHS ${LUA_LIB})
-
-if(LUA_LIBRARY)
-    target_link_libraries(locv ${LUA_LIBRARY})
-else(LUA_LIBRARY)
-    message(FATAL_ERROR "CMake could not find Lua Library")
-endif(LUA_LIBRARY)
+    NAMES opencv_videoio opencv_imgcodecs opencv_imgproc opencv_core)
 
 if(OCV_LIBRARY)
     target_link_libraries(locv ${OCV_LIBRARY})
@@ -28,5 +17,5 @@ endif(OCV_LIBRARY)
 
 set_target_properties(locv PROPERTIES PREFIX "")
 
-install(TARGETS locv DESTINATION "${LUA_LIB}/lua/5.3")
+install(TARGETS locv DESTINATION "$ENV{ROCKS_LIB}")
 
