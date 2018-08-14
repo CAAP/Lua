@@ -116,6 +116,12 @@ end
 
 M.connect = connect
 
+-- I should add backup facilities to these two XXX
+M.inmem = lsql.inmemory
+
+M.temp = lsql.temporary
+----------------------------------
+
 M.newTable = newTable
 
 function M.into( tbname )

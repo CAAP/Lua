@@ -9,7 +9,6 @@
 #define checkstmt(L, i) *(sqlite3_stmt **)luaL_checkudata(L, i, "caap.sqlite3.statement")
 #define newStmt(L) (sqlite3_stmt **)lua_newuserdata(L, sizeof(sqlite3_stmt *));luaL_getmetatable(L, "caap.sqlite3.statement");lua_setmetatable(L, -2)
 
-
 /*
 static void output_html_string(const char *z) {
     int i;
@@ -135,6 +134,7 @@ static int insert (lua_State *L, sqlite3 *conn, sqlite3_stmt *pStmt) {
     	if( sqlite3_reset( pStmt) ) { lua_pushnil(L); lua_pushfstring(L, "Error: INSERT failed: %s.", sqlite3_errmsg(conn)); return 2; }
     	lua_pushboolean(L, 1);
     }
+
     return 1;
 }
 
@@ -180,7 +180,26 @@ static int inmemory (lua_State *L) {
     int error = sqlite3_open(":memory:", ppDB);
     if (*ppDB == NULL || error ) {
 	    lua_pushnil(L);
-	    lua_pushfstring(L, "Error opening database \"%s\": %s\n", dbname, sqlite3_errmsg(*ppDB) );
+	    lua_pushfstring(L, "Error opening in-memory database: %s\n", sqlite3_errmsg(*ppDB) );
+	    return 2;
+    }
+
+    return 1;
+}
+
+static int temporary (lua_State *L) {
+    /* create userdatum to store a sqlite3 connection object. */
+    sqlite3 **ppDB = (sqlite3 **)lua_newuserdata(L, sizeof(sqlite3 *));
+
+    /* set its metatable */
+    luaL_getmetatable(L, "caap.sqlite3.connection");
+    lua_setmetatable(L, -2);
+
+    /* try to open the given database */
+    int error = sqlite3_open("", ppDB);
+    if (*ppDB == NULL || error ) {
+	    lua_pushnil(L);
+	    lua_pushfstring(L, "Error opening a temporary database: %s\n", sqlite3_errmsg(*ppDB) );
 	    return 2;
     }
 
@@ -248,20 +267,17 @@ return 0;
 
 /* ********** BACKUP *********** */
 
-	    rc = sqlite3_backup_step(pBackup, steps);
-	    sqlite3_backup_remaining(pBackup);
-	    sqlite3_backup_pagecount(pBackup);
-
 static int stepforth(lua_State *L) {
-    sqlite3 *connInMem = checkconn(L);
-    sqlite3 *connDest = *(sqlite3 **)lua_touserdata(L, lua_upvalueindex(1));
     sqlite3_backup *pBackup = *(sqlite3_backup **)lua_touserdata(L, lua_upvalueindex(2));
-    const int steps = (int)lua_upvalueindex(3); // XXX check this out
+    const int steps = lua_tointeger(L, lua_upvalueindex(3));
 
     int rc;
     do {
 	rc = sqlite3_backup_step(pBackup, steps);
-    } while( (rc==SQLITE_BUSY || rc==SQLITE_LOCKED)&&sqlite_sleep(250) ); // XXX
+	if (SQLITE_OK==rc) return sqlite3_backup_remaining(pBackup);
+	if (SQLITE_DONE==rc) return 0;
+	sqlite3_sleep(250);
+    } while( 1 );
 }
 
 static int newBackup(lua_State *L) {
@@ -287,7 +303,7 @@ static int newBackup(lua_State *L) {
     /* create userdatum to store a sqlite3_backup object. */
     sqlite3_backup **ppBackup = (sqlite3_backup **)lua_newuserdata(L, sizeof(sqlite3_backup *));
     /* set its metatable */
-    luaL_getmetatable(L, "caap.sqlite3.backup");
+    luaL_getmetatable(L, "caap.sqlite3.backup"); // ADD SUPPORT for this USERDATA XXX
     lua_setmetatable(L, -2);
     /* try to initialize the backup process */
     *ppBackup = sqlite3_backup_init(*ppDB, "main", connInMem, "main");
@@ -379,6 +395,17 @@ static int stmt_gc (lua_State *L) {
     return 0;
 }
 
+/* ***************************** */
+
+/***********  BACKUP  ***********/
+
+static int backup_gc (lua_State *L) {
+    sqlite3_backup *pBackup = *(sqlite3_backup **)luaL_checkudata(L, 1, "caap.sqlite3.backup");
+    if (pBackup && (sqlite3_backup_finish(pBackup) == SQLITE_OK))
+	    pBackup = NULL;
+    return 0;
+}
+
 /* **************************** */
 
 
@@ -404,6 +431,9 @@ static int bind (lua_State *L) {
 
 static const struct luaL_Reg sql_funcs[] = {
     {"connect", connect},
+    {"inmemory", inmemory},
+    {"temp", temporary},
+    {"backup", newBackup},
     {"version", version},
     {NULL, NULL}
 };
@@ -426,11 +456,21 @@ static const struct luaL_Reg stmt_meths[] = {
     {NULL, NULL}
 };
 
+static const struct luaL_Reg backup_meths[] = {
+    {"__gc", backup_gc},
+    {NULL, NULL}
+};
+
 int luaopen_lsql (lua_State *L) {
     luaL_newmetatable(L, "caap.sqlite3.connection");
     lua_pushvalue(L, -1);
     lua_setfield(L, -1, "__index");
     luaL_setfuncs(L, conn_meths, 0);
+
+    luaL_newmetatable(L, "caap.sqlite3.backup");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -1, "__index");
+    luaL_setfuncs(L, backup_meths, 0);
 
     luaL_newmetatable(L, "caap.sqlite3.statement");
     lua_pushvalue(L, -1);
