@@ -51,7 +51,12 @@ local function header( schema )
 end
 
 local function connect( dbname )
-    local conn = assert( lsql.connect( dbname ) )
+    local conn
+
+    if dbname == ":inmemory:" then conn = assert( lsql.inmem( ) )
+    elseif dbname == ":temporary:" then conn = assert( lsql.temp( ) )
+    else conn = assert( lsql.connect( dbname ) ) end
+
     local MM = {}
 
     local function exists( tbname ) return conn:prepare( string.format(isTable, tbname) ) end
@@ -107,6 +112,19 @@ local function connect( dbname )
 	return function(x) return insert( conn, x ) end
     end
 
+    -- IN MEMORY DATABASES --
+    if dbname == ":inmemory:" or dbname == ":temporary:" then
+	MM.memory = true
+	function MM.backup( dbpath, steps )
+	    return lsql.backup(conn, dbpath, steps)
+	end
+    end
+
+    function MM.info()
+	local s = string.format("%s", conn)
+	return s:gsub('(Sqlite3{)', '%1'..(MM.memory and "inmemory=true, " or ""))
+    end
+
     return MM 
 end
 
@@ -116,10 +134,6 @@ end
 
 M.connect = connect
 
--- I should add backup facilities to these two XXX
-M.inmem = lsql.inmemory
-
-M.temp = lsql.temporary
 ----------------------------------
 
 M.newTable = newTable
