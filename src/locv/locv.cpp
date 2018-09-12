@@ -1,5 +1,4 @@
 #include <opencv2/opencv.hpp>
-#include <gdcm/gdcmPixelFormat.h>
 
 #include <vector>
 
@@ -22,6 +21,7 @@ extern "C" {
 #define check81(L, m) if ( (m->depth() > CV_8S) | (m->channels() > 1) ) luaL_error(L, "Only single channel and 8-bit images.")
 #define check83(L, m) if ( (m->depth() > CV_8S) | (m->channels() != 3) ) luaL_error(L, "Only 8-bit 3-channel images.")
 
+/*
 static int cvtype(int pf) {
     switch (pf) {
 	case gdcm::PixelFormat::UINT8: return CV_8U; // uchar
@@ -34,6 +34,7 @@ static int cvtype(int pf) {
 	default: return -1;
     }
 }
+*/
 
 static int seti(lua_State *L, int i, const vector<cv::Point>& points) {
     cv::Mat **um = newmat(L);
@@ -190,6 +191,7 @@ static int openImage(lua_State *L) {
     return 1;
 }
 
+/*
 static int fromGDCM(lua_State *L) {
     char *udata = (char *)luaL_checkudata(L, 1, "caap.gdcm.image");
     lua_getuservalue(L, 1);
@@ -209,10 +211,10 @@ static int fromGDCM(lua_State *L) {
 	    m = m + intercept;
 
     // XXX Add Slope Adjustments
-/*    
-    if ( slope )
-	;
-*/
+    
+//    if ( slope )
+//	;
+
 
     cv::Mat **um = newmat(L);
 //    if (type == CV_16U) { m.convertTo( m, CV_16S ); }
@@ -221,7 +223,7 @@ static int fromGDCM(lua_State *L) {
 
     return 1;
 }
-
+*/
 
 //////////////////////////////
 
@@ -430,20 +432,21 @@ static int doPCA(lua_State *L) {
 
 //////////////
 
-static int median(lua_State *L) {
+static int floodFill(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
-    int ksize = 3;
-    if (lua_gettop(L) > 1)
-	    ksize = luaL_checkinteger(L, 2);
-    if ((ksize%2 == 0) | (ksize < 2))
-	    luaL_error(L, "Aperture size must be odd and greater than 1.");
-    if ((ksize > 5) & (m->depth() != CV_8U))
-	    luaL_error(L, "For larger apertures, it can only be CV_8U.");
-    cv::Mat dst;
-    cv::medianBlur(*m, dst, ksize);
+    int x = luaL_checkinteger(L, 2), y = luaL_checkinteger(L, 3);
+    int lo = luaL_checkinteger(L, 4), up = luaL_checkinteger(L, 5);
+
     cv::Mat **um = newmat(L);
-    *um = new cv::Mat(dst);
-    return 1;
+    *um = new cv::Mat(m->clone());
+
+    cv::Rect ccomp;
+    int flags = 4 + (255 << 8) + 0;
+    cv::Point seed = cv::Point(x, y);
+    int area = floodFill(**um, seed, cv::Scalar(255, 51, 51), &ccomp, cv::Scalar(lo, lo, lo), cv::Scalar(up, up, up), flags);
+
+    lua_pushinteger(L, area);
+    return 2;
 }
 
 static int equalizeHist(lua_State *L) {
@@ -478,6 +481,41 @@ static int morphology(lua_State *L) {
 	case 'B': cv::morphologyEx(*m, dst, cv::MORPH_BLACKHAT, element); break;
 	case 'G': cv::morphologyEx(*m, dst, cv::MORPH_GRADIENT, element); break;
     }
+    cv::Mat **um = newmat(L);
+    *um = new cv::Mat(dst);
+    return 1;
+}
+
+static int median(lua_State *L) {
+    cv::Mat *m = checkmat(L, 1);
+    int ksize = 3;
+    if (lua_gettop(L) > 1)
+	    ksize = luaL_checkinteger(L, 2);
+    if ((ksize%2 == 0) | (ksize < 2))
+	    luaL_error(L, "Aperture size must be odd and greater than 1.");
+    if ((ksize > 5) & (m->depth() != CV_8U))
+	    luaL_error(L, "For larger apertures, it can only be CV_8U.");
+    cv::Mat dst;
+    cv::medianBlur(*m, dst, ksize);
+    cv::Mat **um = newmat(L);
+    *um = new cv::Mat(dst);
+    return 1;
+}
+
+static int gaussian(lua_State *L) {
+    cv::Mat *m = checkmat(L, 1);
+    cv::Size ksize(3, 3);
+    double sx = 0, sy = 0;
+
+    if (lua_gettop(L)>1) {
+	int k = luaL_checkinteger(L, 2);
+	if (k%2 == 0)
+	    luaL_error(L, "Kernel size must be odd.");
+	ksize = cv::Size(k, k);
+    }
+
+    cv::Mat dst;
+    cv::GaussianBlur(*m, dst, ksize, sx, sy, cv::BORDER_DEFAULT);
     cv::Mat **um = newmat(L);
     *um = new cv::Mat(dst);
     return 1;
@@ -1041,17 +1079,25 @@ static int rrect2str(lua_State *L) {
     return 1;
 }
 
-/*
 static int drawEllipse(lua_State *L) {
     cv::RotatedRect *rr = checkrrect(L, 1);
     cv::Mat *m = checkmat(L, 2);
-    cv::Mat dst = cv::Mat::zeros( m->size(), CV_8UC1);
-    cv::ellipse(dst, *rr, cv::Scalar(255,255,255), -1, 8);
+
+    cv::Mat dst;
+
+    if (lua_gettop(L) > 2) {
+	int w = luaL_checkinteger(L, 3);
+	dst = cv::Mat(m->clone());
+	cv::ellipse(dst, *rr, cv::Scalar(255,51,51), w > 0 ? w : 3, 8);
+    } else {
+	dst = cv::Mat::zeros( m->size(), CV_8UC1);
+	cv::ellipse(dst, *rr, cv::Scalar(255,51,51), -1, 8);
+    }
+
     cv::Mat **um = newmat(L);
     *um = new cv::Mat(dst);
     return 1;
 }
-*/
 
 /*
 static int compareHist(lua_State *L) {
@@ -1200,7 +1246,6 @@ static int bilateralFilter(lua_State *L) {
 
 
 
-/*
 static int showImage(lua_State *L) {
   cv::Mat *m = checkmat(L, 1);
 
@@ -1209,14 +1254,15 @@ static int showImage(lua_State *L) {
 
   cv::namedWindow("Image", CV_GUI_NORMAL);
   cv::imshow("Image", *m);
-  cv::waitKey(5000);
+  cv::waitKey(500);
   return 0;
 }
-*/
+
+
 
 static const struct luaL_Reg cv_funcs[] = {
   {"open", openImage},
-  {"openDCM", fromGDCM},
+//  {"openDCM", fromGDCM},
   {"openVideo", videoCapture},
   {"rect", newRect},
   {"rotation", rotationMatrix},
@@ -1228,7 +1274,7 @@ static const struct luaL_Reg cv_funcs[] = {
 static const struct luaL_Reg rrect_meths[] = {
   {"__tostring", rrect2str},
   {"dims", axes},
-//  {"draw", drawEllipse},
+  {"draw", drawEllipse},
   {NULL, NULL}
 };
 
@@ -1259,16 +1305,18 @@ static const struct luaL_Reg mat_meths[] = {
   {"__gc", release},
   {"__len", mat2len},
   {"totable", mat2table},
-//  {"show", showImage},
+  {"show", showImage},
   {"zeros", mat2zeros},
   {"ones", mat2ones},
   {"save", saveImage},
   {"range", inRange},
   {"torect", mat2rect},
+  {"flood", floodFill},
   {"contours", findContours},
   {"draw", drawContours},
   {"chull", convexHull},
   {"nonzero", countNonZero},
+  {"blur", gaussian},
   {"mean", mean},
   {"stdev", stdev},
   {"median", median},
