@@ -107,18 +107,28 @@ static const char* depth2str(int x) {
 
 /* ************* MAT ** ********** */
 
+static int streaming(lua_State *L) {
+    cv::VideoCapture *vc = *(cv::VideoCapture **)lua_touserdata(L, lua_upvalueindex(1));
+    cv::Mat frame;
+
+    if (!vc->isOpened() || !vc->read(frame))
+	return 0;
+
+    lua_pushinteger(L, vc->get(CV_CAP_PROP_POS_FRAMES)); // MSEC
+    cv::Mat **m = newmat(L);
+    *m = new cv::Mat(frame);
+    return 2;
+}
+
 static int videoCapture(lua_State *L) {
     const char *fname = luaL_checkstring(L, 1);
 
-    cv::Mat frames;
-    cv::VideoCapture cap;
-    cap.open( fname );
+    cv::VideoCapture cap( fname );
     if (!cap.isOpened()) luaL_error(L, "Unable to open video file %s", fname);
-    cap >> frames;
-    if (frames.empty()) luaL_error(L, "Cannot read data from video source %s", fname);
 
-    cv::Mat **m = newmat(L);
-    *m = new cv::Mat(frames);
+    cv::VideoCapture **vcp = (cv::VideoCapture **)lua_newuserdata(L, sizeof(cv::VideoCapture *));
+    *vcp = &cap;
+    lua_pushcclosure(L, &streaming, 1); // VideoCapture
     return 1;
 }
 
