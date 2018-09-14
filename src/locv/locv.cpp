@@ -111,7 +111,7 @@ static int streaming(lua_State *L) {
     cv::VideoCapture *vc = *(cv::VideoCapture **)lua_touserdata(L, lua_upvalueindex(1));
     cv::Mat frame;
 
-    if (!vc->isOpened() || !vc->read(frame))
+    if (!(vc->isOpened()) || !(vc->read(frame)))
 	return 0;
 
     lua_pushinteger(L, vc->get(CV_CAP_PROP_POS_FRAMES)); // MSEC
@@ -127,8 +127,10 @@ static int videoCapture(lua_State *L) {
     if (!cap.isOpened()) luaL_error(L, "Unable to open video file %s", fname);
 
     cv::VideoCapture **vcp = (cv::VideoCapture **)lua_newuserdata(L, sizeof(cv::VideoCapture *));
-    *vcp = &cap;
+    *vcp = new cv::VideoCapture(cap);
+
     lua_pushcclosure(L, &streaming, 1); // VideoCapture
+
     return 1;
 }
 
