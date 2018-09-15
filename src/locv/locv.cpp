@@ -120,6 +120,7 @@ static int streaming(lua_State *L) {
     return 2;
 }
 
+// could be possible to change the definition so that wrap can be applied to the result of calling this fn -> must return a videoCapture, closure (not so simple as this impl) XXX
 static int videoCapture(lua_State *L) {
     const char *fname = luaL_checkstring(L, 1);
 
@@ -753,7 +754,12 @@ static int rgb2gray(lua_State *L) {
     cv::Mat *m = checkmat(L, 1);
     check83(L, m);
     cv::Mat dst;
-    cv::cvtColor(*m, dst, CV_RGB2GRAY);
+    int a = 0;
+    if (lua_gettop(L) > 1) {
+	int b = luaL_checkinteger(L, 2);
+	a = ((b < 4) && (b > -1)) ? b : 0;
+    }
+    cv::cvtColor(*m, dst, CV_RGB2GRAY, a);
     cv::Mat **um = newmat(L);
     *um = new cv::Mat(dst);
     return 1;
@@ -1266,7 +1272,7 @@ static int showImage(lua_State *L) {
 
   cv::namedWindow("Image", CV_GUI_NORMAL);
   cv::imshow("Image", *m);
-  cv::waitKey(500);
+  cv::waitKey(800);
   return 0;
 }
 
@@ -1343,9 +1349,9 @@ static const struct luaL_Reg mat_meths[] = {
 //  {"match", matchShapes},
 //  {"backproject", calcBackProject},
 //  {"adaptive", adaptiveThreshold},
-  {"tobyte", convert2byte},
   {"threshold", threshold},
   {"overlay", applyOverlay},
+  {"tobyte", convert2byte},
   {"torgb", gray2rgb},
   {"tofloat",convert2float},
   {"togray", rgb2gray},
