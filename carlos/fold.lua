@@ -116,6 +116,15 @@ function M.keys( t ) return function() return pairs(t) end end
 
 function M.flatten( f ) return function(a) local ff = f(a); return function(x, k) if type(x) == 'table' then for w,y in pairs(x) do ff( y, w ) end else ff( x, k ) end end end end
 
+function M.apply( ... )
+    local fns = {...}
+    local N = #fns
+    assert( N > 0, 'There must be at least one argument.' )
+    local fx = fns[1]
+    for j = 2,N do fx = fns[j]( fx ) end
+    return fx
+end
+
 -- loops --
 
 function M.reduce( m, ... ) local _f, _a = comp{...}; for i,x in state(m) do _f(x, i) end; return _a end
