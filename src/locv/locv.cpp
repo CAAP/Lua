@@ -922,7 +922,9 @@ static int properties(lua_State *L) {
 		  ret = cv::minAreaRect(*m);
 		  break;
 	case 'E': if (m->rows < 5) {lua_pushnumber(L, -1); break;}
-		  ret = cv::fitEllipse(*m);
+		  Mat pointsf;
+		  m->converTo(pointsf, CV_32F);
+		  ret = cv::fitEllipse(pointsf);
 		  break;
     }
 
@@ -1088,6 +1090,10 @@ static int axes(lua_State *L) {
     lua_setfield(L, -2, "width");
     lua_pushinteger(L, rr->size.height);
     lua_setfield(L, -2, "height");
+    lua_pushinteger(L, rr->center.x);
+    lua_setfield(L, -2, "x");
+    lua_pushinteger(L, rr->center.y);
+    lua_setfield(L, -2, "y");
     return 1;
 }
 

@@ -45,7 +45,7 @@ return M
 
 local movit = function() return ocv.openVideo(PATH),nil,nil end
 
----------------
+----------------
 
 -- Iterate until first eye-frame is found!
 local frameOne, initTime = fd.first(movit, function(x) return fd.apply(x, getROI, preprocess, darkest, iseye) end)
@@ -54,9 +54,7 @@ frameOne = RECT:apply(frameOne)
 
 print(frameOne, initTime)
 
--------------------
-
-frameOne:save'frameOne.png'
+----------------
 
 local contours = fd.apply(frameOne, preprocess, darkest, function(fr) return fr:contours'CC' end)
 
@@ -70,6 +68,5 @@ frameTwo:save'ellipses.png'
 
 -------------------
 
---]]
 
 
