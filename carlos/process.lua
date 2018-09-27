@@ -27,19 +27,14 @@ local function iseye( frame ) return fd.first( frame:contours'CC', inrange ) end
 
 local function ellipse( contour ) return contour:property'E' end
 
-local function drawEllipse( econtour, frame, thick ) econtour:draw(frame, thick):show(200) end
+local function drawEllipses( econtours, frame, thick ) fd.reduce(econtours, function(e) frame = e:draw(frame, thick or -1) end); return frame; end
 
 local function workflow( x ) return fd.apply(x, preprocess, darkest, iseye, ellipse) end
 
---[[
-M.inrange = inrange
-M.getROI = getROI
-M.preprocess = preprocess
-M.darkest = darkest
-
-return M
---]]
-
+local function lookForEllipses(fr)
+    local cts = fd.apply(fr, preprocess, darkest, function(f) return f:contours'CC' end)
+    return fd.reduce(cts, fd.filter(inrange), fd.map(ellipse), fd.into, {})
+end
 
 ----- Vars -----
 
@@ -56,17 +51,34 @@ print(frameOne, initTime)
 
 ----------------
 
-local contours = fd.apply(frameOne, preprocess, darkest, function(fr) return fr:contours'CC' end)
+-- Recover contour(s) from frameOne & draw ellipses
+local frTwo = frameOne
 
-local ellipses = fd.reduce(contours, fd.filter(inrange), fd.map(ellipse), fd.into, {})
+local es = lookForEllipses( frTwo )
 
-local frameTwo = frameOne
+frTwo = drawEllipses( es, frTwo, 3 )
 
-fd.reduce(ellipses, function(e) frameTwo = e:draw(frameTwo, 3) end)
+local frTwo = frTwo:save'ellipses.png'
 
-frameTwo:save'ellipses.png'
+print('Coords are:\n', table.concat(fd.reduce(es, fd.map(function(e) local d = e:dims(); return string.format('\t%0.2f, %0.2f', d.x, d.y) end), fd.into, {}), '\n'))
+
+local maskedE = frameOne:ones()
+
+maskedE = drawEllipses( es, maskedE )
+
+--maskedE:save'masked.png'
 
 -------------------
 
+--[[
+local iter = movit()
+
+for k=1:10 do
+    local t, fr =  iter()
+
+    fr = fd.apply(fr, getROI, preprocess, darkest)
+    print("Time: ", t)
+end
+--]]
 
 

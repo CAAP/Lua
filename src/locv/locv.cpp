@@ -404,6 +404,7 @@ static int stdev(lua_State *L) {
 
 //////// PCA //////
 
+/*
 static int doPCA(lua_State *L) {
     cv::Mat data, *m = checkmat(L, 1);
     int asrows = 1, nargs = lua_gettop(L);
@@ -442,6 +443,7 @@ static int doPCA(lua_State *L) {
     *mean = new cv::Mat(pca.mean);
     return 3;
 }
+*/
 
 //////////////
 
@@ -922,8 +924,8 @@ static int properties(lua_State *L) {
 		  ret = cv::minAreaRect(*m);
 		  break;
 	case 'E': if (m->rows < 5) {lua_pushnumber(L, -1); break;}
-		  Mat pointsf;
-		  m->converTo(pointsf, CV_32F);
+		  cv::Mat pointsf;
+		  m->convertTo(pointsf, CV_32F);
 		  ret = cv::fitEllipse(pointsf);
 		  break;
     }
@@ -1112,10 +1114,10 @@ static int drawEllipse(lua_State *L) {
     if (lua_gettop(L) > 2) {
 	int w = luaL_checkinteger(L, 3);
 	dst = cv::Mat(m->clone());
-	cv::ellipse(dst, *rr, cv::Scalar(255,51,51), w > 0 ? w : 3, 8);
+	cv::ellipse(dst, *rr, cv::Scalar(255,51,51), w, 8);
     } else {
 	dst = cv::Mat::zeros( m->size(), CV_8UC1);
-	cv::ellipse(dst, *rr, cv::Scalar(255,51,51), -1, 8);
+	cv::ellipse(dst, *rr, cv::Scalar(255,255,255), -1, 8);
     }
 
     cv::Mat **um = newmat(L);
@@ -1290,7 +1292,7 @@ static const struct luaL_Reg cv_funcs[] = {
   {"openVideo", videoCapture},
   {"rect", newRect},
   {"rotation", rotationMatrix},
-  {"PCA", doPCA},
+//  {"PCA", doPCA},
   {"fromTable", fromTable},
   {NULL, NULL}
 };
