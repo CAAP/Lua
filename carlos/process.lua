@@ -40,8 +40,6 @@ end
 
 local movit = function() return ocv.openVideo(PATH),nil,nil end
 
-----------------
-
 -- Iterate until first eye-frame is found!
 local frameOne, initTime = fd.first(movit, function(x) return fd.apply(x, getROI, preprocess, darkest, iseye) end)
 
@@ -56,13 +54,13 @@ local frTwo = frameOne
 
 local es = lookForEllipses( frTwo )
 
-frTwo = drawEllipses( es, frTwo, 3 )
+--frTwo = drawEllipses( es, frTwo, 3 )
 
-local frTwo = frTwo:save'ellipses.png'
+--local frTwo = frTwo:save'ellipses.png'
 
 print('Coords are:\n', table.concat(fd.reduce(es, fd.map(function(e) local d = e:dims(); return string.format('\t%0.2f, %0.2f', d.x, d.y) end), fd.into, {}), '\n'))
 
-local maskedE = frameOne:ones()
+local maskedE = frameOne:zeros()
 
 maskedE = drawEllipses( es, maskedE )
 
@@ -70,13 +68,15 @@ maskedE = drawEllipses( es, maskedE )
 
 -------------------
 
---[[
+---[[
 local iter = movit()
+maskedE = maskedE:morphology('Dilate', 'Ellipse', 20)
 
-for k=1:10 do
+for k=1,10 do
     local t, fr =  iter()
 
-    fr = fd.apply(fr, getROI, preprocess, darkest)
+    fr = fd.apply(fr, getROI, preprocess, function(f) return f:overlay(maskedE) end)
+    fr:save(string.format("%03d.png", k))
     print("Time: ", t)
 end
 --]]
