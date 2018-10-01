@@ -568,6 +568,8 @@ static int sobel(lua_State *L) {
     if (lua_gettop(L) > 2) {
 	    ksize = luaL_checkinteger(L, 3);
     }
+    if ((ksize > 31) | (ksize%2 == 0))
+	    luaL_error(L, "Kernel size must be odd and less than 31.");
 
     cv::Mat ret;
     if (isx)
@@ -1069,6 +1071,26 @@ static int coordinates(lua_State *L) {
     return 1;
 }
 
+static int drawRectangle(lua_State *L) {
+    cv::Rect *r = checkrect(L, 1);
+    cv::Mat *m = checkmat(L, 2);
+
+    cv::Mat dst;
+
+    if (lua_gettop(L) > 2) {
+	int w = luaL_checkinteger(L, 3);
+	dst = cv::Mat(m->clone());
+	cv::rectangle(dst, *r, cv::Scalar(255,51,51), w, 8);
+    } else {
+	dst = cv::Mat::zeros( m->size(), CV_8UC1);
+	cv::rectangle(dst, *r, cv::Scalar(255,255,255), -1, 8);
+    }
+
+    cv::Mat **um = newmat(L);
+    *um = new cv::Mat(dst);
+    return 1;
+}
+
 static int rect2len(lua_State *L) {
     cv::Rect *r = checkrect(L, 1);
     lua_pushinteger(L, r->width * r->height);
@@ -1100,8 +1122,18 @@ static int axes(lua_State *L) {
 }
 
 static int rrect2str(lua_State *L) {
-    cv::RotatedRect *r = checkrrect(L, 1);
-    lua_pushfstring(L, "ocvRRect{ x = %f, y = %f, width = %f, height = %f, angle = %f }", r->center.x, r->center.y, r->size.width, r->size.height, r->angle);
+    cv::RotatedRect *rr = checkrrect(L, 1);
+    lua_pushfstring(L, "ocvRRect{ x = %f, y = %f, width = %f, height = %f, angle = %f }", rr->center.x, rr->center.y, rr->size.width, rr->size.height, rr->angle);
+    return 1;
+}
+
+static int boundingRectangle(lua_State *L) {
+    cv::RotatedRect *rr = checkrrect(L, 1);
+
+    cv::Rect ret = rr->boundingRect();
+    cv::Rect *r = newrect(L);
+    r->width = ret.width; r->height = ret.height;
+    r->x = ret.x; r->y = ret.y;
     return 1;
 }
 
@@ -1124,6 +1156,8 @@ static int drawEllipse(lua_State *L) {
     *um = new cv::Mat(dst);
     return 1;
 }
+
+/*****************************/
 
 /*
 static int compareHist(lua_State *L) {
@@ -1301,6 +1335,7 @@ static const struct luaL_Reg rrect_meths[] = {
   {"__tostring", rrect2str},
   {"dims", axes},
   {"draw", drawEllipse},
+  {"rect", boundingRectangle},
   {NULL, NULL}
 };
 
@@ -1312,6 +1347,7 @@ static const struct luaL_Reg rect_meths[] = {
   {"ones", rect2ones},
   {"grid", grid},
   {"apply", applyRoi},
+  {"draw", drawRectangle},
   {"dims", dimensions},
   {NULL, NULL}
 };
