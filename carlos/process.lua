@@ -69,16 +69,27 @@ maskedE = drawEllipses( es, maskedE )
 -------------------
 
 ---[[
+
+local function overlay(f) return f:overlay(maskedE) end
+
+local function edges(f) return f:canny(50, 50*3) end
+
+local function maskMe(m) return function(f) return f:copy(m) end end
+
+local function pupilas(f) return f:contours('External') end
+
+local function ellipses(cs) return fd.reduce(cs, fd.map(ellipse), fd.into, {}) end
+
 local iter = movit()
 maskedE = maskedE:morphology('Dilate', 'Ellipse', 20)
 
+maskedE:save'eMask.png'
+
 for k=1,10 do
     local t, fr =  iter()
-
-    fr = fd.apply(fr, getROI, preprocess, function(f) return f:overlay(maskedE) end)
+    fr = fd.apply(fr, getROI, preprocess) -- , maskMe(maskedE), edges, pupilas, ellipses, function(es) return drawEllipses(es, fr, 2) end
     fr:save(string.format("%03d.png", k))
     print("Time: ", t)
 end
 --]]
-
 
