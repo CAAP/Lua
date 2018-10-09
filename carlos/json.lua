@@ -2,6 +2,8 @@
 local M = {}
 
 -- Import Section
+local sql = require'carlos.sqlite'
+local fd = require'carlos.fold'
 
 local concat = table.concat
 local format = string.format
@@ -21,7 +23,7 @@ _ENV = nil -- or M
 -- Local function definitions --
 --------------------------------
 
-local function asJSON()
+local function asJSON( w )
     local ret = {}
     for k,v in pairs(w) do
 	local u = type(v) == 'table' and asJSON(v) or (asint(v) or v)
@@ -39,7 +41,7 @@ M.asJSON = asJSON
 function M.sql2json( q )
     assert(open(q.dbname)) -- file MUST exists
     local db = assert(sql.connect(q.dbname), 'Could not connect to DB '..q.dbname)
-    if db.count(q.tbname. q.clause) > 0 then
+    if db.count(q.tbname, q.clause) > 0 then
 	local ret = fd.reduce( db.query( q.QRY ), fd.map( asJSON ), fd.into, {} )
 	return format('Content-Type: text/plain; charset=utf-8\r\n\r\n[%s]\n', concat(ret, ', '))
     else
