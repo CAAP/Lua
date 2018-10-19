@@ -39,7 +39,7 @@ local ret = sites.html()
 
 local fp = popen(format("ls %s/*/*.{css,js,html}", DIR), 'r')
 for f in fp:lines() do
-    if f:match"js$" and f:match"onloaded" then ret.add_script(read_file(f), 'onloaded')
+    if f:match"onloaded.js" then ret.add_script(read_file(f), 'onloaded')
     elseif f:match'body' then ret.add_body( read_file(f) )
     elseif f:match'css' then ret.add_css( read_file(f) )
     elseif f:match'script' then ret.add_script( read_file(f) )

@@ -1,0 +1,41 @@
+#!/usr/local/bin/lua53
+
+local assert = assert
+local concat = table.concat
+local format = string.format
+local open = io.open
+
+local print = print
+
+local sites = require'carlos.sites'
+
+local args = arg
+
+_ENV = nil
+
+local HELP = [==[
+usage:
+recreate.lua FILE_NAME DEST_DIR
+]==]
+
+assert(#args == 2, HELP)
+
+local function dump_str(str, path)
+    local f = assert(open(path, 'w'))
+    f:write(str)
+    f:close()
+    return true
+end
+
+local function strip( s ) return s:gsub('^%s+', ''):gsub('%s+$', '') end
+
+local FILE = args[1]
+
+local DIR = args[2]:gsub('/$', '')
+
+local form = sites.post( FILE )
+
+dump_str(concat(form, '\n'), format("%s/%s", DIR, strip(form.name)))
+
+print('Registro: ', strip(form.registro))
+print('Nombre: ', strip(form.nombre))
