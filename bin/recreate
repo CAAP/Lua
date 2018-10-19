@@ -1,0 +1,55 @@
+#!/usr/local/bin/lua53
+
+local assert = assert
+local popen = io.popen
+local format = string.format
+local open = io.open
+
+local sites = require'carlos.sites'
+local fd = require'carlos.fold'
+
+local args = arg
+
+_ENV = nil
+
+local HELP = [==[
+usage:
+recreate.lua PATH_DIR DEST_DIR
+]==]
+
+assert(#args == 2, HELP)
+
+local function read_file(path)
+    local f = assert(open(path))
+    local s = f:read'a'
+    f:close()
+    return s
+end
+
+local function dump_str(str, path)
+    local f = assert(open(path, 'w'))
+    f:write(str)
+    f:close()
+    return true
+end
+
+local DIR = args[1]:gsub('/$', '')
+
+local ret = sites.html()
+
+local fp = popen(format("ls %s/*/*.{css,js,html}", DIR), 'r')
+for f in fp:lines() do
+    if f:match"js$" and f:match"onloaded" then ret.add_script(read_file(f), 'onloaded')
+    elseif f:match'body' then ret.add_body( read_file(f) )
+    elseif f:match'css' then ret.add_css( read_file(f) )
+    elseif f:match'script' then ret.add_script( read_file(f) )
+    elseif f:match'head' then ret.set_head( read_file(f) )
+    else print("Error: input file of different pattern", f) end
+end
+
+fp:close()
+
+local WWW = args[2]:gsub('/$', '')
+
+dump_str(ret.asstr(), format("%s/%s/%s", WWW, DIR, "index.html"))
+
