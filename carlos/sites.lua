@@ -38,6 +38,12 @@ local function json( w )
     return format( '{%s}', concat(ret, ', ') ):gsub('"%[', '['):gsub(']"',']'):gsub("'", '"')
 end
 
+local function line_space(iter) fd.first(fd.wrap(iter), function(x) return x:match'^[%s]+$' end) end
+
+local function get_lines(iter, boundary) return concat(fd.conditional(function(l) return l:match(boundary) end, fd.wrap(iter), fd.into, {}), '\n') end
+
+--    vars[nm] = fd.first(fd.wrap(lines), function(x) return x:match'[^%s]+' end)
+
 local function post_form( path )
     local vars = {}
     local lines = iolines( path )
@@ -46,21 +52,19 @@ local function post_form( path )
     local nm, line
     repeat
 	line = lines()
-	if line ~= boundary then
-	    nm = line:match'="([^=]+)"'
-	    vars[nm] = fd.first(fd.wrap(lines), function(x) return x:match'[^%s]+' end)
-	end
+	nm = line:match'="([^=]+)"'
+	line_space(lines)
+	vars[nm] = get_lines(lines, boundary)
     until nm == 'file'
 
-    fd.first(fd.wrap(lines), function(x) return x:match'^[%s]+$' end)
-    local video = fd.reduce(fd.wrap(lines), fd.into, vars)
-    remove(video)
-    return video
+    return vars
 end
 
 ---------------------------------
 -- Public function definitions --
 ---------------------------------
+
+M.REGEX = REGEX
 
 M.wrap = wrap
 

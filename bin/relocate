@@ -35,7 +35,8 @@ local DIR = args[2]:gsub('/$', '')
 
 local form = sites.post( FILE )
 
-dump_str(concat(form, '\n'), format("%s/%s", DIR, strip(form.name)))
+dump_str(form.file, format("%s/%s", DIR, strip(form.name)))
 
 print('Registro: ', strip(form.registro))
 print('Nombre: ', strip(form.nombre))
+if form.comentarios then print('Comentarios: ', strip(form.comentarios)) end

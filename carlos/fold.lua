@@ -131,6 +131,8 @@ function M.reduce( m, ... ) local _f, _a = comp{...}; for i,x in state(m) do _f(
  
 function M.take( k, m, ... ) local _f, _a = comp{...}; for i,x in state(m) do _f(x, i); if i == k then break end end; return _a end
 
+function M.conditional( Cf, m, ... ) local _f, _a = comp{...}; for i,x in state(m) do if Cf(x,i) then break else _f(x, i) end end; return _a end
+
 function M.drop( k, m, ... ) local _f, _a = comp{...}; for i,x in state(m) do if i > k then _f(x, i) end end; return _a end
 
 function M.times(k, ... ) local _f, _a = comp{...}; for i=1,k do _f(i) end; return _a end
