@@ -15,7 +15,7 @@ _ENV = nil
 
 local HELP = [==[
 usage:
-recreate.lua FILE_NAME DEST_DIR
+relocate FILE_NAME DEST_DIR
 ]==]
 
 assert(#args == 2, HELP)

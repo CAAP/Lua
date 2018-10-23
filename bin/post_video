@@ -1,0 +1,5 @@
+#!/bin/ksh
+
+relocate $1 $HOME/videos
+
+### rm $1

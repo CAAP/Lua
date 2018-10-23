@@ -1,0 +1,4 @@
+#!/bin/ksh
+
+doas chown sg:www /var/www/cgi-bin/sg/upload/posts/*
+mv /var/www/cgi-bin/sg/upload/posts/* $HOME/posts/
