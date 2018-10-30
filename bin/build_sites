@@ -6,6 +6,8 @@ local format = string.format
 local open = io.open
 local exec = os.execute
 
+local print = print
+
 local sites = require'carlos.sites'
 local fd = require'carlos.fold'
 
@@ -62,9 +64,13 @@ dump_str(ret.asstr(), format("%s/%s/%s", WWW, DIR, "index.html"))
 
 local REGEX = "([%u_]+)"
 
-local cmd = "cp DIR/EXT/*.EXT DEST/DIR/EXT"
+local cmd = "[ -f DIR/EXT/*.EXT ] && cp DIR/EXT/*.EXT DEST/DIR/EXT"
 
-local function move_files(suffix) assert( exec(cmd:gsub(REGEX, {DIR=DIR, DEST=WWW, EXT=suffix})) ) end
+local function move_files(suffix)
+    local cmd01 = cmd:gsub(REGEX, {DIR=DIR, DEST=WWW, EXT=suffix})
+    print(cmd01)
+    assert( exec(cmd01) )
+end
 
 move_files'svg'
 
@@ -72,7 +78,7 @@ move_files'json'
 
 WWW = WWW:gsub('htdocs', 'cgi-bin')
 
-cmd = "cp DIR/EXT/*.EXT DEST/DIR"
+cmd = "[ -f DIR/EXT/*.EXT ] && cp DIR/EXT/*.EXT DEST/DIR"
 
 move_files'lua'
 
