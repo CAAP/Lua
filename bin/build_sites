@@ -5,6 +5,7 @@ local popen = io.popen
 local format = string.format
 local open = io.open
 local exec = os.execute
+local concat = table.concat
 
 local print = print
 
@@ -33,14 +34,27 @@ local function dump_str(str, path)
     local f = assert(open(path, 'w'))
     f:write(str)
     f:close()
+    print('\nSuccess:', path, 'done.\n')
     return true
 end
 
+local REGEX = "([%u_]+)"
+
 local DIR = args[1]:gsub('/$', '')
+
+local cond = "ls DIR/*/*.EXT"
 
 local ret = sites.html()
 
-local fp = popen(format("ls %s/*/*.{css,js,html}", DIR), 'r')
+local function check_cond(cmd, TB) return exec(cmd:gsub(REGEX, TB)) end
+
+local function condp(TB) return check_cond(cond, TB) end
+
+-------------------------
+
+local exts = fd.reduce({"css", "js", "html"}, fd.filter(function(x) return condp{DIR=DIR, EXT=x} end), fd.into, {})
+
+local fp = popen(format("ls %s/*/*.{%s}", DIR, concat(exts,',')), 'r')
 for f in fp:lines() do
     if f:match"onloaded.js" then ret.add_script(read_file(f), 'onloaded')
     elseif f:match'body' then ret.add_body( read_file(f) )
@@ -62,14 +76,14 @@ dump_str(ret.asstr(), format("%s/%s/%s", WWW, DIR, "index.html"))
 
 ----------------
 
-local REGEX = "([%u_]+)"
+local SUBS = {DIR=DIR, DEST=WWW, EXT=''}
 
-local cmd = "[ -f DIR/EXT/*.EXT ] && cp DIR/EXT/*.EXT DEST/DIR/EXT"
+local cmd = "cp DIR/EXT/*.EXT DEST/DIR/EXT"
 
-local function move_files(suffix)
-    local cmd01 = cmd:gsub(REGEX, {DIR=DIR, DEST=WWW, EXT=suffix})
-    print(cmd01)
-    assert( exec(cmd01) )
+local function move_files(suffix, TB)
+    local TB = TB or SUBS
+    TB.EXT = suffix
+    if not(condp(TB) and check_cond(cmd,TB)) then print('Error: files not found containing suffix', suffix) end
 end
 
 move_files'svg'
@@ -78,7 +92,9 @@ move_files'json'
 
 WWW = WWW:gsub('htdocs', 'cgi-bin')
 
-cmd = "[ -f DIR/EXT/*.EXT ] && cp DIR/EXT/*.EXT DEST/DIR"
+SUBS.DEST = WWW
+
+cmd = "cp DIR/EXT/*.EXT DEST/DIR"
 
 move_files'lua'
 
