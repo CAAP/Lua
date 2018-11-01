@@ -1,0 +1,8 @@
+#!/bin/ksh
+
+POSTS=/var/www/cgi-bin/sg/upload/posts
+myfiles=$(find $POSTS -type f -maxdepth 1 -name *.txt)
+
+if [ ${#myfiles[@]} -gt 0 ]; then
+    mv $POSTS/*.txt $HOME/posts
+fi
