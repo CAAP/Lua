@@ -1157,6 +1157,29 @@ static int drawEllipse(lua_State *L) {
     return 1;
 }
 
+static int drawCircle(lua_State *L) {
+    cv::Mat *m = checkmat(L, 1);
+    const int x = luaL_checkinteger(L, 2);
+    const int y = luaL_checkinteger(L, 3);
+    const int r = luaL_checkinteger(L, 4);
+
+    cv::Mat dst;
+    dst = cv::Mat(m->clone());
+    cv::Point p(x, y);
+
+    if (lua_gettop(L) > 2) {
+	int w = luaL_checkinteger(L, 5);
+	cv::circle(dst, p, r, cv::Scalar(255,51,51), w, 8);
+    } else {
+//	dst = cv::Mat::zeros( m->size(), CV_8UC1);
+	cv::circle(dst, p, r, cv::Scalar(255,255,255), -1, 8);
+    }
+
+    cv::Mat **um = newmat(L);
+    *um = new cv::Mat(dst);
+    return 1;
+}
+
 /*****************************/
 
 /*
@@ -1376,6 +1399,7 @@ static const struct luaL_Reg mat_meths[] = {
   {"flood", floodFill},
   {"contours", findContours},
   {"draw", drawContours},
+  {"circle", drawCircle},
   {"chull", convexHull},
   {"nonzero", countNonZero},
   {"blur", gaussian},

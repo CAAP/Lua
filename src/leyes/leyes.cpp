@@ -14,7 +14,7 @@ extern "C" {
 
 #define checkmat(L,i) *(cv::Mat **)luaL_checkudata(L, i, "caap.opencv.mat")
 
-cv::Mat double calcularGradiente(const cv::Mat &mat) {
+cv::Mat calcularGradiente(const cv::Mat &mat) {
     cv::Mat out(mat.rows, mat.cols, CV_64F);
     for (int y = 0; y < mat.rows; ++y) {
 	const uchar *Mr = mat.ptr<uchar>(y);
@@ -107,8 +107,8 @@ static int eyesCenter(lua_State *L) {
 
     cv::Mat eye, weighted, out;
     cv::resize(*m, eye, cv::Size(eyeWidth, eyeWidth*(m->rows)/(m->cols)));
-    cv::Mat gradX calcularGradiente(eye);
-    cv::Mat gradY calcularGradiente(eye.t()).t();
+    cv::Mat gradX = calcularGradiente(eye);
+    cv::Mat gradY = calcularGradiente(eye.t()).t();
     cv::Mat norma = norm(gradX, gradY);
     double threshold = calc_threshold(norma, mythresh);
 
@@ -133,7 +133,7 @@ static int eyesCenter(lua_State *L) {
     for (int y = 0; y < weighted.rows; ++y) {
 	unsigned char *row = weighted.ptr<unsigned char>(y);
 	for (int x = 0; x < weighted.cols; ++x)
-	    rows[x] = (255 - row[x]);
+	    row[x] = (255 - row[x]);
     }
 
     cv::Mat outSum = cv::Mat::zeros(eye.rows, eye.cols, CV_64F);
@@ -150,7 +150,7 @@ static int eyesCenter(lua_State *L) {
     }
 
     double ngrads = weighted.cols * weighted.rows;
-    outSum.converTo(out, CV_32F, 1.0/ngrads);
+    outSum.convertTo(out, CV_32F, 1.0/ngrads);
     cv::Point maxP;
     double maxVal;
     cv::minMaxLoc(out, NULL, &maxVal, NULL, &maxP);

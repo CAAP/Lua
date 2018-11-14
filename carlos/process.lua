@@ -1,7 +1,7 @@
 local ocv = require'locv'
 local fd = require'carlos.fold'
 
-local PATH='fesormex.mp4'
+local PATH='videos/20181104_173459_edited.mp4'
 
 local RECT = ocv.rect{x=0, y=0, width=1920, height=500}
 
@@ -41,11 +41,13 @@ end
 local movit = function() return ocv.openVideo(PATH),nil,nil end
 
 -- Iterate until first eye-frame is found!
-local frameOne, initTime = fd.first(movit, function(x) return fd.apply(x, getROI, preprocess, darkest, iseye) end)
+local frameOne, initTime = fd.first(movit, function(x) return fd.apply(x, preprocess, darkest, iseye) end) -- getROI, 
 
-frameOne = RECT:apply(frameOne)
+--frameOne = RECT:apply(frameOne)
 
 print(frameOne, initTime)
+
+frameOne:save'frameOne.png'
 
 ----------------
 
@@ -85,6 +87,7 @@ maskedE = maskedE:morphology('Dilate', 'Ellipse', 20)
 
 maskedE:save'eMask.png'
 
+--[[
 for k=1,10 do
     local t, fr =  iter()
     fr = fd.apply(fr, getROI, preprocess) -- , maskMe(maskedE), edges, pupilas, ellipses, function(es) return drawEllipses(es, fr, 2) end
