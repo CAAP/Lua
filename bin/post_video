@@ -1,5 +1,13 @@
 #!/bin/ksh
 
-relocate $1 $HOME/videos
+POSTS=/var/www/cgi-bin/sg/upload/posts
+myfiles=$(find $POSTS -type f -maxdepth 1 -name *.txt)
+BINN=/home/sg/Lua/bin/relocate
+
+if [ ${#myfiles[@]} -gt 0 ]; then
+    for file in $myfiles; do
+	$BINN $file  $HOME/videos
+    done
+fi
 
 ### rm $1
