@@ -83,7 +83,7 @@ function M.html()
     local head = ''
     local lang = 'es-MX'
 
-    function MM.add_script(txt, after)
+    function MM.add_jscript(txt, after)
 	if after then
 	    scs2[#scs2+1] = txt
 	else
@@ -114,4 +114,3 @@ function M.html()
 end
 
 return M
-

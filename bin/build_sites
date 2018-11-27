@@ -12,16 +12,33 @@ local print = print
 local sites = require'carlos.sites'
 local fd = require'carlos.fold'
 
-local args = arg
+local args = {...}
 
 _ENV = nil
 
 local HELP = [==[
 usage:
-recreate PATH_DIR DEST_DIR
+build_sites PATH_DIR DEST_DIR
 ]==]
 
 assert(#args == 2, HELP)
+
+-- path to files is 1st argument; removing trailing slash
+local DIR = args[1]:gsub('/$', '')
+
+-- path to output is 2nd argument; removing trailing slash
+local WWW = args[2]:gsub('/$', '')
+
+-- name of folder
+local STEM = DIR:match'/?([^/]+)$'
+
+-- output DIR must match httpd deamon root directory
+assert(WWW:match'htdocs', 'Not a root directory for the httpd deamon')
+
+-- Uppercase letters plus underscore
+local REGEX = '([%u_]+)'
+
+-- Local Fn's
 
 local function read_file(path)
     local f = assert(open(path))
@@ -38,43 +55,82 @@ local function dump_str(str, path)
     return true
 end
 
-local REGEX = "([%u_]+)"
+local function addFiles(exts, ret)
+    local fp = assert(popen(format("ls %s/*/*.{%s}", DIR, concat(exts,',')), 'r'))
+    for f in fp:lines() do
+	if f:match"onloaded.js" then ret.add_jscript( read_file(f), 'onloaded' )
+	elseif f:match'body' then ret.add_body( read_file(f) )
+	elseif f:match'css' then ret.add_css( read_file(f) )
+	elseif f:match'jscript' then ret.add_jscript( read_file(f) )
+	elseif f:match'head' then ret.set_head( read_file(f) )
+	else print("Error: input file of different pattern", f) end
+    end
+    fp:close()
+end
 
-local DIR = args[1]:gsub('/$', '')
+local function copyFiles(exts)
 
-local cond = "ls DIR/*/*.EXT"
+
+local SUBS = {DIR=DIR, DEST=WWW, EXT=''}
+
+local cmd = "cp DIR/EXT/*.EXT DEST/DIR/EXT"
+
+local function move_files(suffix, TB)
+    local TB = TB or SUBS
+    TB.EXT = suffix
+    if not(condp(TB) and check_cond(cmd,TB)) then print('Error: files not found containing suffix', suffix) end
+end
+
+move_files'svg'
+
+move_files'json'
+
+WWW = WWW:gsub('htdocs', 'cgi-bin')
+
+SUBS.DEST = WWW
+
+cmd = "cp DIR/EXT/*.EXT DEST/DIR"
+
+move_files'lua'
+
+
+
+-- Replaces REGEX pattern and executes the command
+local function check_cond(cmd, TB) return exec(cmd:gsub(REGEX, TB)) end
+
+-- Checks in PATH whether files with given EXTENSION exists
+local function condp(TB) return check_cond("ls DIR/*/*.EXT", TB) end
+
+-- Looks for files under DIR with given EXTENSIONs, keeping only those EXTENSIONs
+local function filter_exts(EXTS) return fd.reduce(EXTS, fd.filter(function(x) return condp{DIR=DIR, EXT=x} end), fd.into, {}) end
+
+-------------------------
+--	HTML file      --
+-------------------------
 
 local ret = sites.html()
 
-local function check_cond(cmd, TB) return exec(cmd:gsub(REGEX, TB)) end
+-- Look for files under DIR with extensions css|js|html
+local exts = filter_exts{"css", "js", "html"}
+assert(#exts > 0, "Nothing to be done. None a single file found!")
 
-local function condp(TB) return check_cond(cond, TB) end
+-- Lists all files found under DIR and process them accordingly
+addFiles(exts, ret)
+
+-- Dump HTML file 'index.html' in output directory
+dump_str(ret.asstr(), format("%s/%s/%s", WWW, STEM, "index.html"))
 
 -------------------------
+--	Extra files    --
+-------------------------
 
-local exts = fd.reduce({"css", "js", "html"}, fd.filter(function(x) return condp{DIR=DIR, EXT=x} end), fd.into, {})
+-- Look for files under DIR with extensions svg|json|lua
+exts = filter_exts{"svg", "json", "lua"}
+if #exts == 0 then return "Success" end
 
-local fp = popen(format("ls %s/*/*.{%s}", DIR, concat(exts,',')), 'r')
-for f in fp:lines() do
-    if f:match"onloaded.js" then ret.add_script(read_file(f), 'onloaded')
-    elseif f:match'body' then ret.add_body( read_file(f) )
-    elseif f:match'css' then ret.add_css( read_file(f) )
-    elseif f:match'script' then ret.add_script( read_file(f) )
-    elseif f:match'head' then ret.set_head( read_file(f) )
-    else print("Error: input file of different pattern", f) end
-end
+-- Lists all files found under DIR and move them to OUTPUT dir
 
-fp:close()
 
-local WWW = args[2]:gsub('/$', '')
-
-assert(WWW:match'htdocs', 'Not a root directory for the httpd deamon')
-
-----------------
-
-dump_str(ret.asstr(), format("%s/%s/%s", WWW, DIR, "index.html"))
-
-----------------
 
 local SUBS = {DIR=DIR, DEST=WWW, EXT=''}
 
