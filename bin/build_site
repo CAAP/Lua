@@ -61,8 +61,9 @@ end
 
 local function identity(x) return x end
 
-local function rewrite(s)
-    return s:gsub('href="([^"]+)"', ):gsub('src="([^"]+)"', )
+local function prefix(p)
+    local rep = '%1'..p..'%2'
+    return function(s) return s:gsub('(href=")([^"]*)', rep):gsub('(src=")([^"]*)', rep) end
 end
 
 -- Replaces REGEX pattern and executes the command
@@ -74,8 +75,8 @@ local function condp(TB) return check_cond("ls DIR/*/*.EXT", TB) end
 -- Looks for files under DIR with given EXTENSIONs, keeping only those EXTENSIONs
 local function filter_exts(EXTS) return fd.reduce(EXTS, fd.filter(function(x) return condp{DIR=DIR, EXT=x} end), fd.into, {}) end
 
-local function add_onefile(f, ret, patt)
-    local flt = patt and  or identity
+local function add_onefile(f, ret, p)
+    local flt = p and prefix(p) or identity
     if f:match"onloaded.js" then ret.add_jscript( flt(read_file(f)), 'onloaded' )
     elseif f:match'body' then ret.add_body( flt(read_file(f)) )
     elseif f:match'css' then ret.add_css( flt(read_file(f)) )
@@ -91,9 +92,10 @@ local function add_files(exts, ret)
     return true
 end
 
+-- XXX prefix can be given as argument instead
 local function add_basefiles(ret)
     local fp = assert(popen(format("ls %s/*/my*", ROOT), 'r'))
-    for f in fp:lines() do add_onefile(f, ret) end
+    for f in fp:lines() do add_onefile(f, ret, '../') end
     fp:close()
     return true
 end
