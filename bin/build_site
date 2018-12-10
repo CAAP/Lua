@@ -63,7 +63,8 @@ local function identity(x) return x end
 
 local function prefix(p)
     local rep = '%1'..p..'%2'
-    return function(s) return s:gsub('(href=")([^"]*)', rep):gsub('(src=")([^"]*)', rep) end
+    local function anURL(x, y) return (y:match'http' and x..y or x..p..y) end
+    return function(s) return s:gsub('(href=")([^"]*)', anURL):gsub('(src=")([^"]*)', rep) end
 end
 
 -- Replaces REGEX pattern and executes the command
