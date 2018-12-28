@@ -21,6 +21,8 @@ _ENV = nil
 local noTable = "no such table:"
 local isTable = "SELECT * FROM %q LIMIT 1"
 local newTable = "CREATE TABLE IF NOT EXISTS %q ( %s )"
+local newView = "CREATE VIEW IF NOT EXISTS %q %s"
+local newIndex = "CREATE INDEX IF NOT EXISTS %s"
 local inTable = "INSERT INTO %q VALUES( %s )"
 local upTable = "UPDATE %q SET %s = ? WHERE %s LIKE ?"
 local rmTable = "DELETE FROM %q WHERE %s = ?"
@@ -137,6 +139,10 @@ M.connect = connect
 ----------------------------------
 
 M.newTable = newTable
+
+M.newView = newView
+
+M.newIndex = newIndex
 
 function M.into( tbname )
     return into( 'inQuery', tbname )
