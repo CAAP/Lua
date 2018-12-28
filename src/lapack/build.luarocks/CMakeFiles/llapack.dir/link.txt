@@ -1,1 +1,0 @@
-/usr/bin/clang  -fPIC -O2 -fPIC -Wall -pedantic  -shared -Wl,-soname,llapack.so -o llapack.so CMakeFiles/llapack.dir/llapack.c.o /home/carlos/Lua/lib/liblua.a -llapack 
