@@ -3,7 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
-#include <sqlite3.h>
+#include "sqlite3.h"
 
 #define checkconn(L) *(sqlite3 **)luaL_checkudata(L, 1, "caap.sqlite3.connection")
 #define checkstmt(L, i) *(sqlite3_stmt **)luaL_checkudata(L, i, "caap.sqlite3.statement")
