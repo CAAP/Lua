@@ -2,28 +2,16 @@
 #include <lauxlib.h>
 
 #include <string.h>
-#include <errno.h>
 
 #include <zmq.h>
 
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
 
-extern int errno;
-
-static char *err2str() {
-    switch(errno) {
-	case EAGAIN: return "non-blocking mode was requested and the message cannot be sent";
-	case ENOTSUP: return "operation not supperted by this socket type";
-	case EINVAL: return "trying to send multipart data, which this socket type does not allow";
-	case ETERM: return "the context associated with this socket was terminated";
-	case EFSM: return "the context associated with this socket was terminated";
-	case ENOTSOCK: return "this socket is invalid";
-	case EINTR: return "the operation was interrupted by a signal before it was done";
-	case EHOSTUNREACH: return "the message cannot be routed";
-	default: return "undefined error ocurred";
-    }
-}
+typedef struct ID {
+    uint8_t id[256];
+    size_t size;
+} ID;
 
 // Thread-safe SOCKETS:
 // ZMQ_CLIENT, ZMQ_SERVER, ZMQ_DISH, ZMQ_RADIO, ZMQ_SCATTER, ZMQ_GATHER
@@ -165,18 +153,14 @@ static int skt_send (lua_State *L) {
 
 static int skt_send_id (lua_State *L) {
     void *skt = checkskt(L);
-    uint8_t *myid = (uint8_t *)luaL_checkudata(L, 2, "caap.zmq.id");
+    struct ID *myid = (struct ID *)luaL_checkudata(L, 2, "caap.zmq.id");
 
-    lua_getuservalue(L, 1);
-    int rc = zmq_send(skt, myid, (size_t)lua_tointeger(L, -1), ZMQ_SNDMORE);
-    lua_pop(L, 1);
-
+    int rc = zmq_send(skt, myid->id, myid->size, ZMQ_SNDMORE);
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
+	lua_pushstring(L, "ERROR: socket ID could not be sent!");
 	return 2;
     }
-
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -218,81 +202,33 @@ static int skt_recv (lua_State *L) {
 static int skt_recv_id (lua_State *L) {
     void *skt = checkskt(L);
 
-    char id [256];
-    size_t id_size = zmq_recv(skt, id, 256, 0);
-    if (id_size < 1) {
-	lua_pushnil(L);
-	lua_pushstring(L, "ERROR: socket received an invalid ID!");
-	return 2;
-    }
+//    uint8_t id [256];
+//    size_t id_size = 256;
 
-    return 1;
-}
+    struct ID *myid = (struct ID*)lua_newuserdata(L, sizeof(struct ID));
+    luaL_getmetatable(L, "caap.zmq.id");
+    lua_setmetatable(L, -2);
 
-static int streaming(lua_State *L) {
-    void *skt = checkskt(L);
-
-    char id [256];
-    size_t id_size = zmq_recv(skt, id, 256, 0);
-    if (id_size < 1) {
-	lua_pushnil(L);
-	lua_pushstring(L, "ERROR: socket received an invalid ID!");
-	return 2;
-    }
-
-    lua_pushlstring(L, id, id_size);
-    size_t len;
-    const char *myid = lua_tolstring(L, -1, &len);
-
-    if(len != id_size || strncmp(myid, id, len)) {
-	lua_pushnil(L);
-	lua_pushstring(L, "ERROR: ID becomes invalid after assignment to pointer.");
-	return 2;
-    }
-
-    int rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
-    if (rc == -1) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
-	return 2;
-    }
-
-//    size_t len = 0;
-    const char *msg = luaL_checklstring(L, 2, &len);
-
-    if (0 == len)
-	rc = zmq_send(skt, 0, 0, 0);
-    else
-	rc = zmq_send(skt, msg, len, ZMQ_SNDMORE);
-
-    if (rc == -1) {
-	lua_pushnil(L);
-	lua_pushstring(L, "ERROR: socket could not send message!");
-	return 2;
-    }
-
-    rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
-    rc = zmq_send(skt, 0, 0, ZMQ_SNDMORE);
-
+    myid->size = zmq_recv(skt, myid->id, 256, 0);
+// If < 0 Error
     lua_pushboolean(L, 1);
     return 1;
 }
 
 ////////   ID   /////////
-
-static int id_asstr(lua_State *L) {
-    lua_getuservalue(L, 1);
-    lua_pushfstring(L, "zmq{Active ID, size=%d}", lua_tointeger(L, -1));
-    lua_pop(L, 1);
+static int skt_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Active ID}");
     return 1;
 }
 
-static int id_gc (lua_State *L) {
-    uint8_t *myid = (uint8_t *)luaL_checkudata(L, 2, "caap.zmq.id");
-    if (myid)
-	myid = NULL;
+static int skt_gc (lua_State *L) {
+    struct ID *myid = (struct ID *)luaL_checkudata(L, 2, "caap.zmq.id");
+    if (myid && (zmq_close(skt) == 0))
+	skt = NULL;
     return 0;
 }
+
+
 
 // // // // // // // // // // // // //
 
@@ -315,7 +251,6 @@ static const struct luaL_Reg skt_meths[] = {
     {"recv",	   skt_recv},
     {"send_id",	   skt_send_id},
     {"recv_id",	   skt_recv_id},
-    {"stream",	   streaming},
     {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},
     {NULL,	   NULL}
