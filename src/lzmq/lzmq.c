@@ -165,12 +165,10 @@ static int skt_send (lua_State *L) {
 
 static int skt_send_id (lua_State *L) {
     void *skt = checkskt(L);
-    uint8_t *myid = (uint8_t *)luaL_checkudata(L, 2, "caap.zmq.id");
+    size_t id_size;
+    const char *id = luaL_checklstring(L, 2, &id_size);
 
-    lua_getuservalue(L, 1);
-    int rc = zmq_send(skt, myid, (size_t)lua_tointeger(L, -1), ZMQ_SNDMORE);
-    lua_pop(L, 1);
-
+    int rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
@@ -226,6 +224,7 @@ static int skt_recv_id (lua_State *L) {
 	return 2;
     }
 
+    lua_pushlstring(L, id, id_size);
     return 1;
 }
 
@@ -250,7 +249,7 @@ static int streaming(lua_State *L) {
 	return 2;
     }
 
-    int rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
+    int rc = zmq_send(skt, myid, len, ZMQ_SNDMORE);
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
@@ -271,7 +270,7 @@ static int streaming(lua_State *L) {
 	return 2;
     }
 
-    rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
+    rc = zmq_send(skt, myid, len, ZMQ_SNDMORE);
     rc = zmq_send(skt, 0, 0, ZMQ_SNDMORE);
 
     lua_pushboolean(L, 1);
