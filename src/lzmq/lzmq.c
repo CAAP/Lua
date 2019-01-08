@@ -184,15 +184,29 @@ int send_msg(lua_State *L, void *skt, int idx, int multip) {
     size_t len = 0;
     const char *data = luaL_checklstring(L, idx, &len);
     zmq_msg_t msg;
-    int rc = zmq_msg_init_data( &msg, data, len, NULL, NULL );
+    int rc = zmq_msg_init_data( &msg, len==0 ? 0 :(void *)data, len, NULL, NULL ); // XXX send 0-length data
     if (rc == -1)
 	return rc;
     rc = zmq_msg_send( &msg, skt, multip );
     return rc; // either error or success
 }
 
+// XXX return value is number or errors, should add table w errno's & msg's
 static int skt_send_mult_msg(lua_State *L) {
-    ;
+    void *skt = checkskt(L);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    int i, rc = 0, N = luaL_len(L, 2);
+    for (i=1; i<N; i++) {
+	lua_rawgeti(L, 2, i);
+	if (-1 == send_msg(L, skt, 3, ZMQ_SNDMORE))
+	    rc++;
+	lua_pop(L, 1);
+    }
+    lua_rawgeti(L, 2, N);
+    if (-1 == send_msg(L, skt, 3, 0))
+	rc++;
+    lua_pushinteger(L, rc);
+    return 1;
 }
 
 static int skt_send_msg(lua_State *L) {
@@ -225,22 +239,6 @@ static int skt_send (lua_State *L) {
 	lua_pushstring(L, "ERROR: socket could not send message!");
 	return 2;
     }
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-static int skt_send_id (lua_State *L) {
-    void *skt = checkskt(L);
-    size_t id_size;
-    const char *id = luaL_checklstring(L, 2, &id_size);
-
-    int rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
-    if (rc == -1) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
-	return 2;
-    }
-
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -327,9 +325,8 @@ static const struct luaL_Reg skt_meths[] = {
     {"bind",	   skt_bind},
     {"connect",	   skt_connect},
     {"send",	   skt_send},
-//    {"recv",	   skt_recv},
-    {"send_id",	   skt_send_id},
-//    {"recv_id",	   skt_recv_id},
+    {"send_msg",   skt_send_msg},
+    {"send_msgs",  skt_send_mult_msg},
     {"recv_msg",   skt_recv_msg},
     {"recv_msgs",  skt_recv_mult_msg},
     {"__tostring", skt_asstr},
@@ -393,6 +390,20 @@ static int skt_recv_id (lua_State *L) {
     lua_pushlstring(L, id, id_size);
     return 1;
 }
+
+static int skt_send_id (lua_State *L) {
+    void *skt = checkskt(L);
+    size_t id_size;
+    const char *id = luaL_checklstring(L, 2, &id_size);
+
+    int rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
+	return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
 */
-
-
