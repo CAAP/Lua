@@ -273,7 +273,8 @@ static int skt_send_mult_msg(lua_State *L) {
 
 static int skt_send_msg(lua_State *L) {
     void *skt = checkskt(L);
-    int rc = send_msg(L, skt, 2, 0);
+    int mult = luaL_checkinteger(L, 2);
+    int rc = send_msg(L, skt, 2, mult);
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
@@ -348,13 +349,14 @@ static int skt_set_id(lua_State *L) {
     void *skt = checkskt(L);
     char identity[10];
     sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
-    int rc = zmq_setsockopt(skt, ZMQ_IDENTITY, identity, strlen(identity));
+    size_t len = strlen(identity);
+    int rc = zmq_setsockopt(skt, ZMQ_IDENTITY, identity, len);
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", err2str());
 	return 2;
     }
-    lua_pushboolean(L, 1);
+    lua_pushlstring(L, identity, len);
     return 1;
 }
 
