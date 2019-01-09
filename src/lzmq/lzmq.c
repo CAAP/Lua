@@ -50,6 +50,63 @@ static char *err2str() {
 // Native
 // a ZMQ_STREAM is used to send and receive TCP data from a non-ZMQ peer
 // when using the tcp::// transport.
+//
+// Reply Message Envelopes
+// An envelope is a way of safely packaging up data with an address,
+// without touching the data itself. By separating reply addresses
+// into an envelope we make it possible to write general purpose
+// intermediaries such as APIs and proxies.
+// When you use REQ & REP sockets you don't even see envelopes.
+//
+// Simple Reply Envelope
+// A request-reply exchange consists of a request message, and an eventual
+// reply message. There's only one reply for each request.
+// The ZeroMQ reply envelope formally consists of zero or more reply
+// addresses, followed by an empty frame, followed by the message body.
+// The REQ socket creates the simplest possible reply envelope, which
+// has no address, just an empty delimiter frame and the message
+// frame; this is a two-frame message.
+//
+// REQ - REQ
+// The REQ socket sends, to the network, an empty delimiter frame in
+// front of the message data. REQ sockets are synchronous, they send
+// one request and then wait for one reply.
+// The REP socket reads and saves all identity frames up to and incluiding
+// the empty delimiter, then passes the following frame or frames to the
+// caller. REP sockets are synchronous and talk to one peer at a time.
+//
+// DEALER
+// The DEALER socket is oblivious to the reply envelope. Sockets are
+// asynchronous and like PUSH and PULL combined. They distribute sent
+// messages among all connections, and fair-queue received messages.
+// A DEALER gives us an asynchronous client that can talk to multiple
+// REP servers. We would be able to send any number of requests without
+// waiting for replies.
+//
+// ROUTER
+// The router socket, unlike other sockets, tracks every connection it has,
+// and tells the caller about these, by sticking the connection identity
+// in front of each message received. An identity is just a binary string
+// with no meaning. When you send a message via a ROUTER socket, you first
+// send an identity frame.
+// When "receiving" messages a ZMQ_ROUTER socket shall prepend a message
+// part containing the identity of the originating peer to the message
+// before passing it to the application.
+// When "sending" messages a ZMQ_ROUTER socket shall remove the first part
+// of the message and use it to determine the identity of the peer the
+// message shall be routed to.
+// The ROUTER socket invents a random identity for each connection with
+// which it works.
+// Each time ROUTER gives you a message, it tells you what peer that came
+// from, as an identity. ROUTER will route messages asynchronously to any
+// peer connected to it, if you prefix the identity as the first frame.
+// A ROUTER gives us an asynchronous server that can talk to multiple
+// REQ clients at the same time. We would be able to process any number
+// of request in parallel.
+// We can use ROUTER in two distinct ways:
+// As a "proxy" that switches messages between front- & backend sockets.
+// An an "application" that reads the message and acts on it. The
+// ROUTER must know the format of the 'reply envelope' it's being sent.
 
 
 //
@@ -179,6 +236,8 @@ static int skt_connect (lua_State *L) {
 // when sending each message except the final
 // The zmq_msg_t structure passed to
 // zmq_msg_send is nullified during the call
+// There is no way to cancel a partially sent
+// message, except by closing the socket
 
 int send_msg(lua_State *L, void *skt, int idx, int multip) {
     size_t len = 0;
@@ -205,6 +264,7 @@ static int skt_send_mult_msg(lua_State *L) {
     lua_rawgeti(L, 2, N);
     if (-1 == send_msg(L, skt, 3, 0))
 	rc++;
+    lua_pop(L, 1);
     lua_pushinteger(L, rc);
     return 1;
 }
@@ -218,28 +278,6 @@ static int skt_send_msg(lua_State *L) {
 	return 2;
     }
     lua_pushinteger(L, rc);
-    return 1;
-}
-
-static int skt_send (lua_State *L) {
-    void *skt = checkskt(L);
-    size_t len = 0;
-    const char *msg = luaL_checklstring(L, 2, &len);
-    int rc, multip;
-
-    multip = lua_toboolean(L, 3) ? ZMQ_SNDMORE : 0;
-
-    if (0 == len)
-	rc = zmq_send(skt, 0, 0, 0);
-    else
-	rc = zmq_send(skt, msg, len, multip);
-
-    if (rc == -1) {
-	lua_pushnil(L);
-	lua_pushstring(L, "ERROR: socket could not send message!");
-	return 2;
-    }
-    lua_pushboolean(L, 1);
     return 1;
 }
 
@@ -277,20 +315,6 @@ int recv_msg(lua_State *L, void *skt) {
 	return 2;
     }
     return zmq_msg_more( &msg );
-//    int64_t more;
-//    size_t more_size = sizeof( more );
-//    rc = zmq_getsockopt(skt, ZMQ_RCVMORE, &more, &more_size); // XXX check rc != -1 !!!
-//    return more;
-}
-
-static int mult_part_msg(lua_State *L) {
-    void *skt = checkskt(L);	   // state
-    int cnt = lua_tointeger(L, 2); // counter
-    if (cnt > 0 && lua_toboolean(L, 3) == 0) // NO more msg's in queue
-	return 0;
-    lua_pushinteger(L, ++cnt);	   // increment counter
-    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
-    return 3;
 }
 
 static int skt_recv_mult_msg(lua_State *L) {
@@ -305,6 +329,16 @@ static int skt_recv_msg(lua_State *L) {
     void *skt = checkskt(L);
     lua_pushboolean(L, recv_msg(L, skt)); // could 'pushboolean' to know if a multi-part msg
     return 2;
+}
+
+static int mult_part_msg(lua_State *L) {
+    void *skt = checkskt(L);	   // state
+    int cnt = lua_tointeger(L, 2); // counter
+    if (cnt > 0 && lua_toboolean(L, 3) == 0) // NO more msg's in queue
+	return 0;
+    lua_pushinteger(L, ++cnt);	   // increment counter
+    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
+    return 3;
 }
 
 // // // // // // // // // // // // //
@@ -351,6 +385,29 @@ int luaopen_lzmq (lua_State *L) {
 }
 
 /*
+
+static int skt_send (lua_State *L) {
+    void *skt = checkskt(L);
+    size_t len = 0;
+    const char *msg = luaL_checklstring(L, 2, &len);
+    int rc, multip;
+
+    multip = lua_toboolean(L, 3) ? ZMQ_SNDMORE : 0;
+
+    if (0 == len)
+	rc = zmq_send(skt, 0, 0, 0);
+    else
+	rc = zmq_send(skt, msg, len, multip);
+
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: socket could not send message!");
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static int skt_recv (lua_State *L) {
     void *skt = checkskt(L);
     int allp = 0;
@@ -406,4 +463,5 @@ static int skt_send_id (lua_State *L) {
     lua_pushboolean(L, 1);
     return 1;
 }
+
 */
