@@ -6,6 +6,8 @@
 
 #include <zmq.h>
 
+#define randof(num) (int)((float)(num)*random()/(RAND_MAX+1.0))
+
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
 
@@ -317,6 +319,16 @@ int recv_msg(lua_State *L, void *skt) {
     return zmq_msg_more( &msg );
 }
 
+static int mult_part_msg(lua_State *L) {
+    void *skt = checkskt(L);	   // state
+    int cnt = lua_tointeger(L, 2); // counter
+    if (cnt > 0 && lua_toboolean(L, 3) == 0) // NO more msg's in queue
+	return 0;
+    lua_pushinteger(L, ++cnt);	   // increment counter
+    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
+    return 3;
+}
+
 static int skt_recv_mult_msg(lua_State *L) {
     lua_pushboolean(L, 1);			// upvalue 'more'
     lua_pushcclosure(L, &mult_part_msg, 1);	// iter function
@@ -331,14 +343,19 @@ static int skt_recv_msg(lua_State *L) {
     return 2;
 }
 
-static int mult_part_msg(lua_State *L) {
-    void *skt = checkskt(L);	   // state
-    int cnt = lua_tointeger(L, 2); // counter
-    if (cnt > 0 && lua_toboolean(L, 3) == 0) // NO more msg's in queue
-	return 0;
-    lua_pushinteger(L, ++cnt);	   // increment counter
-    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
-    return 3;
+// Set simple random printable identity on socket
+static int skt_set_id(lua_State *L) {
+    void *skt = checkskt(L);
+    char identity[10];
+    sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
+    int rc = zmq_setsockopt(skt, ZMQ_IDENTITY, identity, strlen(identity));
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
 }
 
 // // // // // // // // // // // // //
@@ -358,11 +375,11 @@ static const struct luaL_Reg ctx_meths[] = {
 static const struct luaL_Reg skt_meths[] = {
     {"bind",	   skt_bind},
     {"connect",	   skt_connect},
-    {"send",	   skt_send},
     {"send_msg",   skt_send_msg},
     {"send_msgs",  skt_send_mult_msg},
     {"recv_msg",   skt_recv_msg},
     {"recv_msgs",  skt_recv_mult_msg},
+    {"set_id",	   skt_set_id},
     {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},
     {NULL,	   NULL}
