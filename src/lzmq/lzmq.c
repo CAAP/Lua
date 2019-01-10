@@ -3,10 +3,11 @@
 
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include <zmq.h>
 
-#define randof(num) (int)((float)(num)*random()/(RAND_MAX+1.0))
+#define randof(num) (int)((float)(num)*rand()/(RAND_MAX+1.0))
 
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
@@ -131,7 +132,11 @@ static int new_context(lua_State *L) {
 
 static int new_socket(lua_State *L) {
     void *ctx = checkctx(L);
-    int type = ZMQ_STREAM;
+    const char* ttype = luaL_checkstring(L, 2);
+
+    lua_getfield(L, lua_upvalueindex(1), ttype);
+    int type = lua_tointeger(L, -1);
+    lua_pop(L, 1);
 
     void **pskt = (void **)lua_newuserdata(L, sizeof(void *));
     luaL_getmetatable(L, "caap.zmq.socket");
@@ -143,7 +148,6 @@ static int new_socket(lua_State *L) {
 	lua_pushstring(L, "Error creating ZMQ socket\n");
 	return 2;
     }
-
     return 1;
 }
 
@@ -157,6 +161,47 @@ static int ctx_gc (lua_State *L) {
     if (ctx && (zmq_ctx_term(ctx) == 0))
 	ctx = NULL;
     return 0;
+}
+
+// POLL
+//
+// Input/Output multiplexing
+//
+// A mechanism for applications to multiplex input/output events
+// in a level-triggered fashion over a set of sockets. Each member
+// of the array pointed to by the items argument is a zmq_pollitem_t
+// structure.
+// zmq_poll shall examine either the ZMQ socket/standard socket
+// specified, for the event(s) specified in events.
+// If none of the requested events have occurred, zmq_poll shall
+// wait timeout milliseconds for an event to occur on any of the
+// requested items. If the value of timeout is 0, it shall return
+// immediately. If the value of timeout is -1, it shall block
+// indefinitely until a requested event has occurred.
+// The "events and revents" are bit masks constructed by OR'ing a
+// combination of the following event flags:
+// 	ZMQ_POLLIN	at least one message may be received wo blocking
+// 	ZMQ_POLLOUT	at least one message may be sent wo blocking
+// 	ZMQ_POLLERR	some sort of error condition is present
+// 	ZMQ_POLLPRI	of NO use
+
+static int zmqpoll(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+    int i,N = luaL_len(L, 1);
+
+    zmq_pollitem_t *items = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+
+    for (i=0;i<N;){
+	lua_rawgeti(L, 1, ++i);
+	items->socket = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+	items->fd = 0;
+	items->events = ;
+	items->revents = 0;
+	items++;
+    }
+
+    return 1;
+
 }
 
 //
@@ -203,7 +248,22 @@ static int skt_bind (lua_State *L) {
     const char *addr = luaL_checkstring(L, 2);
     if (zmq_bind(skt, addr) == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to bind socket to endpoint: %s\n", addr);
+	lua_pushfstring(L, "ERROR: Unable to bind socket to endpoint: %s: %s\n", addr, err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// Unbind a socket specified by the socket
+// argument from the endpoint specified by
+// the endpoint argument
+static int skt_unbind(lua_State *L) {
+    void *skt = ckeckskt(L);
+    const char *addr = luaL_checkstring(L, 2);
+    if (-1 == zmq_unbind(skt, addr)) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to unbind socket to endpoint: %s: %s\n", addr, err2str());
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -218,7 +278,27 @@ static int skt_connect (lua_State *L) {
     const char *addr = luaL_checkstring(L, 2);
     if (zmq_connect(skt, addr) == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s\n", addr);
+	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// Disconnect a socket from the endpoint.
+// Any outstanding messages physically
+// received from the network but not yet
+// received by the application shall be
+// discarded. The behaviour for discarding
+// messages sent but not yet typically
+// transferred to the network depends on
+// the value of the ZMQ_LINGER option.
+static int skt_disconnect (lua_State *L) {
+    void *skt = checkskt(L);
+    const char *addr = luaL_checkstring(L, 2);
+    if (zmq_disconnect(skt, addr) == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, err2str());
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -273,7 +353,7 @@ static int skt_send_mult_msg(lua_State *L) {
 
 static int skt_send_msg(lua_State *L) {
     void *skt = checkskt(L);
-    int mult = luaL_checkinteger(L, 2);
+    int mult = lua_toboolean(L, 3);
     int rc = send_msg(L, skt, 2, mult);
     if (rc == -1) {
 	lua_pushnil(L);
@@ -376,6 +456,7 @@ static const struct luaL_Reg ctx_meths[] = {
 
 static const struct luaL_Reg skt_meths[] = {
     {"bind",	   skt_bind},
+    {"unbind",	   skt_unbind},
     {"connect",	   skt_connect},
     {"send_msg",   skt_send_msg},
     {"send_msgs",  skt_send_mult_msg},
@@ -391,7 +472,21 @@ int luaopen_lzmq (lua_State *L) {
     luaL_newmetatable(L, "caap.zmq.context");
     lua_pushvalue(L, -1);
     lua_setfield(L, -1, "__index");
-    luaL_setfuncs(L, ctx_meths, 0);
+//  ass socket Types as upvalue to methods in this library
+    lua_newtable(L);
+    lua_pushinteger(L, ZMQ_PAIR); lua_setfield(L, -2, "pair");
+    lua_pushinteger(L, ZMQ_PUB);  lua_setfield(L, -2, "pub");
+    lua_pushinteger(L, ZMQ_SUB);  lua_setfield(L, -2, "sub");
+    lua_pushinteger(L, ZMQ_REQ);  lua_setfield(L, -2, "req");
+    lua_pushinteger(L, ZMQ_REP);  lua_setfield(L, -2, "rep");
+    lua_pushinteger(L, ZMQ_DEALER); lua_setfield(L, -2, "dealer");
+    lua_pushinteger(L, ZMQ_ROUTER); lua_setfield(L, -2, "router");
+    lua_pushinteger(L, ZMQ_PULL); lua_setfield(L, -2, "pull");
+    lua_pushinteger(L, ZMQ_PUSH); lua_setfield(L, -2, "push");
+    lua_pushinteger(L, ZMQ_XPUB); lua_setfield(L, -2, "xpub");
+    lua_pushinteger(L, ZMQ_XSUB); lua_setfield(L, -2, "xsub");
+    lua_pushinteger(L, ZMQ_STREAM); lua_setfield(L, -2, "stream");
+    luaL_setfuncs(L, ctx_meths, 1);
 
     luaL_newmetatable(L, "caap.zmq.socket");
     lua_pushvalue(L, -1);
