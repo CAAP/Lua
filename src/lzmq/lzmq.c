@@ -14,7 +14,7 @@
 
 extern int errno;
 
-static char *err2str() {
+char *err2str() {
     switch(errno) {
 	case EAGAIN: return "non-blocking mode was requested and the message cannot be sent";
 	case ENOTSUP: return "operation not supperted by this socket type";
@@ -28,6 +28,8 @@ static char *err2str() {
 	default: return "undefined error ocurred";
     }
 }
+
+int event2int(const char *ev) { return (strncmp(ev, "pollin", 6) == 0 ? ZMQ_POLLIN : ZMQ_POLLOUT); }
 
 // Thread-safe SOCKETS:
 // ZMQ_CLIENT, ZMQ_SERVER, ZMQ_DISH, ZMQ_RADIO, ZMQ_SCATTER, ZMQ_GATHER
@@ -185,23 +187,41 @@ static int ctx_gc (lua_State *L) {
 // 	ZMQ_POLLERR	some sort of error condition is present
 // 	ZMQ_POLLPRI	of NO use
 
+
+static int poll_event(lua_State *L) {
+    zmq_pollitem_t item, *items = (zmq_pollitem_t *)lua_touserdata(L, lua_upvalueindex(L, 1));
+    const int FNIDX = lua_upvalueindex(L, 2);
+    int i,N = luaL_len(L, FNIDX);
+
+    zmq_poll(items, N, -1); // block indefinitely
+    for (i = 0; i < N; i++) {
+	item = items[i];
+	switch (item.event) {
+	    case ZMQ_POLLIN:
+		d
+	    case ZMQ_POLLOUT:
+    }
+}
+
 static int zmqpoll(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
     int i,N = luaL_len(L, 1);
 
     zmq_pollitem_t *items = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
-
+    lua_newtable(L); // function table
     for (i=0;i<N;){
-	lua_rawgeti(L, 1, ++i);
-	items->socket = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+	lua_rawgeti(L, 1, ++i); // push struct
+	lua_rawgeti(L, -1, 3); lua_rawseti(L, -3, i); // add fun to table XXX weak values
+	lua_rawgeti(L, -1, 1); items->socket = *(void **)lua_touserdata(L, -1); lua_pop(L, 1);
 	items->fd = 0;
-	items->events = ;
+	lua_rawgeti(L, -1, 2); items->events = event2int(lua_tostring(L, -1)); lua_pop(L, 1);
 	items->revents = 0;
+	lua_pop(L, 1); // pop struct
 	items++;
     }
 
+    lua_pushcclosure(L, poll_event, 2); // upvalues: items & fn's table
     return 1;
-
 }
 
 //
@@ -239,6 +259,11 @@ static int skt_gc(lua_State *L) {
 	skt = NULL;
     return 0;
 }
+
+// Following a "zmq_bind", the socket enters a "mute" state unless or until at least one
+// incoming or outgoing connection is made, at which point the socket enters a ready state.
+// In the mute state, the socket blocks or drops messages according to the socket type. By
+// contrast, following a "zmq_connect", the socket enters the "ready" state.
 
 // Accept incoming connections on a socket
 // binds the socket to a local endpoint (port)
@@ -411,8 +436,7 @@ static int mult_part_msg(lua_State *L) {
 }
 
 static int skt_recv_mult_msg(lua_State *L) {
-    lua_pushboolean(L, 1);			// upvalue 'more'
-    lua_pushcclosure(L, &mult_part_msg, 1);	// iter function
+    lua_pushcclosure(L, &mult_part_msg, 0);	// iter function
     lua_pushvalue(L, 1);			// state := socket
     lua_pushinteger(L, 0);			// initialize counter to zero
     return 3;
@@ -472,7 +496,7 @@ int luaopen_lzmq (lua_State *L) {
     luaL_newmetatable(L, "caap.zmq.context");
     lua_pushvalue(L, -1);
     lua_setfield(L, -1, "__index");
-//  ass socket Types as upvalue to methods in this library
+//  add "socket types" as upvalue to methods in this library
     lua_newtable(L);
     lua_pushinteger(L, ZMQ_PAIR); lua_setfield(L, -2, "pair");
     lua_pushinteger(L, ZMQ_PUB);  lua_setfield(L, -2, "pub");
