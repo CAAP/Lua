@@ -187,19 +187,23 @@ static int ctx_gc (lua_State *L) {
 // 	ZMQ_POLLERR	some sort of error condition is present
 // 	ZMQ_POLLPRI	of NO use
 
-
+/*
 static int poll_event(lua_State *L) {
     zmq_pollitem_t item, *items = (zmq_pollitem_t *)lua_touserdata(L, lua_upvalueindex(L, 1));
-    const int FNIDX = lua_upvalueindex(L, 2);
-    int i,N = luaL_len(L, FNIDX);
+    const int FN_IDX = lua_upvalueindex(L, 2);
+    int i,N = luaL_len(L, FN_IDX);
 
     zmq_poll(items, N, -1); // block indefinitely
     for (i = 0; i < N; i++) {
 	item = items[i];
-	switch (item.event) {
+	switch (item.events) {
 	    case ZMQ_POLLIN:
-		d
+		if (item.revents & ZMQ_POLLIN) {
+		    lua_rawgeti(L, FN_IDX, i+1);
+		}
+		break;
 	    case ZMQ_POLLOUT:
+		break;
     }
 }
 
@@ -223,6 +227,7 @@ static int zmqpoll(lua_State *L) {
     lua_pushcclosure(L, poll_event, 2); // upvalues: items & fn's table
     return 1;
 }
+*/
 
 //
 // SOCKET
@@ -284,7 +289,7 @@ static int skt_bind (lua_State *L) {
 // argument from the endpoint specified by
 // the endpoint argument
 static int skt_unbind(lua_State *L) {
-    void *skt = ckeckskt(L);
+    void *skt = checkskt(L);
     const char *addr = luaL_checkstring(L, 2);
     if (-1 == zmq_unbind(skt, addr)) {
 	lua_pushnil(L);
@@ -444,7 +449,7 @@ static int skt_recv_mult_msg(lua_State *L) {
 
 static int skt_recv_msg(lua_State *L) {
     void *skt = checkskt(L);
-    lua_pushboolean(L, recv_msg(L, skt)); // could 'pushboolean' to know if a multi-part msg
+    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
     return 2;
 }
 
@@ -472,7 +477,6 @@ static const struct luaL_Reg zmq_funcs[] = {
 };
 
 static const struct luaL_Reg ctx_meths[] = {
-    {"socket",	   new_socket},
     {"__tostring", ctx_asstr},
     {"__gc",	   ctx_gc},
     {NULL,	   NULL}
@@ -482,6 +486,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"bind",	   skt_bind},
     {"unbind",	   skt_unbind},
     {"connect",	   skt_connect},
+    {"disconnect", skt_disconnect},
     {"send_msg",   skt_send_msg},
     {"send_msgs",  skt_send_mult_msg},
     {"recv_msg",   skt_recv_msg},
@@ -492,12 +497,10 @@ static const struct luaL_Reg skt_meths[] = {
     {NULL,	   NULL}
 };
 
-int luaopen_lzmq (lua_State *L) {
-    luaL_newmetatable(L, "caap.zmq.context");
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -1, "__index");
-//  add "socket types" as upvalue to methods in this library
-    lua_newtable(L);
+
+static void socket_fn(lua_State *L) {
+//  add "socket types" as upvalue to method socket
+    lua_newtable(L); // upvalue
     lua_pushinteger(L, ZMQ_PAIR); lua_setfield(L, -2, "pair");
     lua_pushinteger(L, ZMQ_PUB);  lua_setfield(L, -2, "pub");
     lua_pushinteger(L, ZMQ_SUB);  lua_setfield(L, -2, "sub");
@@ -510,11 +513,20 @@ int luaopen_lzmq (lua_State *L) {
     lua_pushinteger(L, ZMQ_XPUB); lua_setfield(L, -2, "xpub");
     lua_pushinteger(L, ZMQ_XSUB); lua_setfield(L, -2, "xsub");
     lua_pushinteger(L, ZMQ_STREAM); lua_setfield(L, -2, "stream");
-    luaL_setfuncs(L, ctx_meths, 1);
+    lua_pushcclosure(L, &new_socket, 1);
+    lua_setfield(L, -2, "socket");
+}
+
+int luaopen_lzmq (lua_State *L) {
+    luaL_newmetatable(L, "caap.zmq.context");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, ctx_meths, 0);
+    socket_fn(L);
 
     luaL_newmetatable(L, "caap.zmq.socket");
     lua_pushvalue(L, -1);
-    lua_setfield(L, -1, "__index");
+    lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, skt_meths, 0);
 
     // create library
