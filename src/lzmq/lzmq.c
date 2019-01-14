@@ -132,6 +132,9 @@ static int new_context(lua_State *L) {
     return 1;
 }
 
+static int skt_subscribe(lua_State *L);
+static int skt_unsubscribe(lua_State *L);
+
 static int new_socket(lua_State *L) {
     void *ctx = checkctx(L);
     const char* ttype = luaL_checkstring(L, 2);
@@ -150,6 +153,16 @@ static int new_socket(lua_State *L) {
 	lua_pushstring(L, "Error creating ZMQ socket\n");
 	return 2;
     }
+
+    if(type == ZMQ_SUB) {
+	luaL_getmetatable(L, "caap.zmq.socket");
+	lua_pushcclosure(L, &skt_subscribe, 0);
+	lua_setfield(L, -2, "subscribe");
+	lua_pushcclosure(L, &skt_unsubscribe, 0);
+	lua_setfield(L, -2, "unsubscribe");
+	lua_pop(L, 1); // pop metatable
+    }
+
     return 1;
 }
 
@@ -163,6 +176,38 @@ static int ctx_gc (lua_State *L) {
     if (ctx && (zmq_ctx_term(ctx) == 0))
 	ctx = NULL;
     return 0;
+}
+
+// PROXY
+//
+// Built-in ZMQ proxy
+// The proxy connects a frontend socket to a backend socket.
+// Conceptually, data flows from frontend to backend. The proxy
+// is fully symmetric and there is no technical difference
+// between frontend and backend.
+// Before calling zmq_proxy you must set any socket options, and
+// connect or bind both frontend and backend sockets.
+// zmq_proxy runs in the current thread and returns only if/when
+// the current context is closed.
+// If the capture socket is not NULL, the proxy shall send all
+// messages, received on both frontend and backend, to the capture
+// socket.
+
+static int new_proxy(lua_State *L) {
+    void *frontend = checkskt(L);
+    void *backend = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+    void *capture = NULL;
+    if (lua_isuserdata(L, 3))
+	capture = *(void **)luaL_checkudata(L, 3, "caap.zmq.socket");
+    int rc = zmq_proxy(frontend, backend, capture);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to create proxy: %s\n", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+
 }
 
 // POLL
@@ -469,10 +514,57 @@ static int skt_set_id(lua_State *L) {
     return 1;
 }
 
+static int skt_subscribe(lua_State *L) {
+    void *skt = checkskt(L);
+    const char* filter = luaL_checkstring(L, 2);
+    int rc = zmq_setsockopt(skt, ZMQ_SUBSCRIBE, filter, strlen(filter));
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting subscribe filter for socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int skt_unsubscribe(lua_State *L) {
+    void *skt = checkskt(L);
+    const char* filter = luaL_checkstring(L, 2);
+    int rc = zmq_setsockopt(skt, ZMQ_UNSUBSCRIBE, filter, strlen(filter));
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: unsetting subscribe filter for socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// // // // // // // // // // // // //
+//  add "socket types" as upvalue to method "socket"
+static void socket_fn(lua_State *L) {
+    lua_newtable(L); // upvalue
+    lua_pushinteger(L, ZMQ_PAIR); lua_setfield(L, -2, "PAIR");
+    lua_pushinteger(L, ZMQ_PUB);  lua_setfield(L, -2, "PUB");
+    lua_pushinteger(L, ZMQ_SUB);  lua_setfield(L, -2, "SUB");
+    lua_pushinteger(L, ZMQ_REQ);  lua_setfield(L, -2, "REQ");
+    lua_pushinteger(L, ZMQ_REP);  lua_setfield(L, -2, "REP");
+    lua_pushinteger(L, ZMQ_DEALER); lua_setfield(L, -2, "DEALER");
+    lua_pushinteger(L, ZMQ_ROUTER); lua_setfield(L, -2, "ROUTER");
+    lua_pushinteger(L, ZMQ_PULL); lua_setfield(L, -2, "PULL");
+    lua_pushinteger(L, ZMQ_PUSH); lua_setfield(L, -2, "PUSH");
+    lua_pushinteger(L, ZMQ_XPUB); lua_setfield(L, -2, "XPUB");
+    lua_pushinteger(L, ZMQ_XSUB); lua_setfield(L, -2, "XSUB");
+    lua_pushinteger(L, ZMQ_STREAM); lua_setfield(L, -2, "STREAM");
+    lua_pushcclosure(L, &new_socket, 1);
+    lua_setfield(L, -2, "socket");
+}
+//
 // // // // // // // // // // // // //
 
 static const struct luaL_Reg zmq_funcs[] = {
     {"context", new_context},
+    {"proxy", new_proxy},
     {NULL, NULL}
 };
 
@@ -497,25 +589,6 @@ static const struct luaL_Reg skt_meths[] = {
     {NULL,	   NULL}
 };
 
-
-static void socket_fn(lua_State *L) {
-//  add "socket types" as upvalue to method socket
-    lua_newtable(L); // upvalue
-    lua_pushinteger(L, ZMQ_PAIR); lua_setfield(L, -2, "pair");
-    lua_pushinteger(L, ZMQ_PUB);  lua_setfield(L, -2, "pub");
-    lua_pushinteger(L, ZMQ_SUB);  lua_setfield(L, -2, "sub");
-    lua_pushinteger(L, ZMQ_REQ);  lua_setfield(L, -2, "req");
-    lua_pushinteger(L, ZMQ_REP);  lua_setfield(L, -2, "rep");
-    lua_pushinteger(L, ZMQ_DEALER); lua_setfield(L, -2, "dealer");
-    lua_pushinteger(L, ZMQ_ROUTER); lua_setfield(L, -2, "router");
-    lua_pushinteger(L, ZMQ_PULL); lua_setfield(L, -2, "pull");
-    lua_pushinteger(L, ZMQ_PUSH); lua_setfield(L, -2, "push");
-    lua_pushinteger(L, ZMQ_XPUB); lua_setfield(L, -2, "xpub");
-    lua_pushinteger(L, ZMQ_XSUB); lua_setfield(L, -2, "xsub");
-    lua_pushinteger(L, ZMQ_STREAM); lua_setfield(L, -2, "stream");
-    lua_pushcclosure(L, &new_socket, 1);
-    lua_setfield(L, -2, "socket");
-}
 
 int luaopen_lzmq (lua_State *L) {
     luaL_newmetatable(L, "caap.zmq.context");
