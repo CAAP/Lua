@@ -22,12 +22,29 @@ static int unveil_raw(lua_State *L) {
 }
 
 /*
+    unsigned int sleep(unsigned int);
+*/
+static int sleep_raw(lua_State *L) {
+    const unsigned int secs = luaL_checkinteger(L, 1);
+
+    lua_pushboolean(L, 1);
+    if(0 == sleep(secs))
+	return 1;
+    else {
+	lua_pushnil(L);
+	lua_pushstring(L, strerror(errno));
+	return 2;
+    }
+}
+
+/*
     int pledge(const char *promises, const char *execpromises);
 */
 
 
 static const struct luaL_Reg bsd_funcs[] = {
     {"unveil", unveil_raw},
+    {"sleep", sleep_raw},
     {NULL, NULL}
 };
 
