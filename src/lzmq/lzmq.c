@@ -403,26 +403,31 @@ int send_msg(lua_State *L, void *skt, int idx, int multip) {
     int rc = zmq_msg_init_data( &msg, len==0 ? 0 :(void *)data, len, NULL, NULL ); // XXX send 0-length data
     if (rc == -1)
 	return rc;
-    rc = zmq_msg_send( &msg, skt, multip );
-    return rc; // either error or success
+    return zmq_msg_send( &msg, skt, multip ); // either error or success
 }
 
-// XXX return value is number or errors, should add table w errno's & msg's
+// sends ALL or NONE
 static int skt_send_mult_msg(lua_State *L) {
     void *skt = checkskt(L);
     luaL_checktype(L, 2, LUA_TTABLE);
-    int i, rc = 0, N = luaL_len(L, 2);
+    int i, N = luaL_len(L, 2);
     for (i=1; i<N; i++) {
 	lua_rawgeti(L, 2, i);
-	if (-1 == send_msg(L, skt, 3, ZMQ_SNDMORE))
-	    rc++;
+	if (-1 == send_msg(L, skt, 3, ZMQ_SNDMORE)) {
+	    lua_pushnil(L);
+	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	    return 2;
+	}
 	lua_pop(L, 1);
     }
     lua_rawgeti(L, 2, N);
-    if (-1 == send_msg(L, skt, 3, 0))
-	rc++;
+    if (-1 == send_msg(L, skt, 3, 0)) {
+	    lua_pushnil(L);
+	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	    return 2;
+    }
     lua_pop(L, 1);
-    lua_pushinteger(L, rc);
+    lua_pushinteger(L, N); // number of messages sent
     return 1;
 }
 
@@ -435,7 +440,7 @@ static int skt_send_msg(lua_State *L) {
 	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
 	return 2;
     }
-    lua_pushinteger(L, rc);
+    lua_pushinteger(L, rc); // length of message sent
     return 1;
 }
 

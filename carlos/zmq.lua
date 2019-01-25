@@ -6,6 +6,8 @@ local zmq = require'lzmq'
 
 local fd = require'carlos.fold'
 
+local assert = assert
+
 -- No more external access after this point
 _ENV = nil
 
@@ -26,12 +28,12 @@ function M.stream(endpoint)
 
     local function msgs() return srv:recv_msgs() end -- returns iter, state & counter
 
-    function MM.close(id) assert(srv:send_msgs{id, ""} == 0) end
+    function MM.close(id) assert(srv:send_msgs{id, ""}) end
 
-    function MM.send(id, ...) assert(srv:send_msgs{id, ...} == 0) end
+    function MM.send(...) return srv:send_msgs{...} end
 
     function MM.receive()
-	local id, more = assert(srv:recv:msg())
+	local id, more = assert(srv:recv_msg())
 	if more then more = fd.reduce(msgs, fd.into, {}) end
 	return id, more
     end

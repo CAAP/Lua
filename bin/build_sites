@@ -42,7 +42,7 @@ local function extras()
     local fp = assert(popen(format("cd %s && ls -d *", DIR), 'r'))
     for f in fp:lines() do
 	if not mydirs[f] then
-	    print('Extra folder found', DIR, f)
+	    print('\n\nExtra folder found', DIR, f)
 	    check_cond("mkdir -p WWW/STEM/EXD", {WWW=WWW, STEM=STEM, EXD=f})
 	    exec(format("build_site %s/%s %s %s", DIR, f, WWW, DIR))
 	end
@@ -54,6 +54,7 @@ end
 
 --- CHECK all folders & subfolders exist FIRST ---
 check_cond("mkdir -p WWW/STEM", {WWW=WWW, STEM=STEM})
+check_cond("mkdir -p WWW/STEM", {WWW=WWW:gsub('htdocs', 'cgi-bin'), STEM=STEM})
 
 --- DO building of site FIRST ---
 exec(format("build_site %s %s", DIR, WWW))
