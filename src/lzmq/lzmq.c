@@ -155,7 +155,7 @@ static int new_socket(lua_State *L) {
 	return 2;
     }
 
-    if(type == ZMQ_SUB) {
+    if(type == ZMQ_SUB || type == ZMQ_XSUB) {
 	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_subscribe, 0);
 	lua_setfield(L, -2, "subscribe");
@@ -216,9 +216,9 @@ static int poll_now(lua_State *L) {
 	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
 	return 2;
     }
-    lua_pushnil(L); //in case of timeout
-    for (i=0; i<N; i++) {
-	if (items[i].revents && ZMQ_POLLIN) {
+    lua_pushinteger(L, 0); //in case of timeout
+    for (i=0; i<N;) {
+	if (items[i++].revents && ZMQ_POLLIN) {
 	    lua_pushinteger(L, i);
 	    break;
 	}
