@@ -3,9 +3,7 @@ local M = {}
 
 -- Import section
 local zmq = require'lzmq'
-
 local fd = require'carlos.fold'
-
 local assert = assert
 
 -- No more external access after this point
@@ -30,7 +28,7 @@ function M.stream(endpoint)
 
     function MM.close(id) assert(srv:send_msgs{id, ""}) end
 
-    function MM.send(...) return srv:send_msgs{...} end
+    function MM.send(id, s) return srv:send_msgs{id, s} end
 
     function MM.receive()
 	local id, more = assert(srv:recv_msg())
@@ -39,6 +37,19 @@ function M.stream(endpoint)
     end
 
     return MM
+end
+
+function M.cache(frontend, backend)
+    local ctx = assert(zmq.context())
+    local front = assert(ctx:socket'SUB')
+    local back  = assert(ctx:socket'XPUB')
+
+    assert(front:connect(frontend or 'tcp://localhost:5557'))
+    assert(back:bind(backend or 'tcp://*:5558'))
+    assert(front:subscribe'')
+
+    local poll = assert(zmq.pollin{front, back})
+
 end
 
 ----------------------------------
