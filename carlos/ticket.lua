@@ -82,8 +82,8 @@ function M.ticket(w)
     return concat(ret, '\n')
 end
 
-function M.bixolon(s)
-    local p = popen("nc 192.168.10.21 9100", 'w')
+function M.bixolon(endpoint, s)
+    local p = popen("nc ".. endpoint,'w')
     local ret = p:write(s)
     p:close()
     return ret

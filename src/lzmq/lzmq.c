@@ -422,9 +422,9 @@ static int skt_send_mult_msg(lua_State *L) {
     }
     lua_rawgeti(L, 2, N);
     if (-1 == send_msg(L, skt, 3, 0)) {
-	    lua_pushnil(L);
-	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
-	    return 2;
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	return 2;
     }
     lua_pop(L, 1);
     lua_pushinteger(L, N); // number of messages sent
