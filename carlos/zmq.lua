@@ -5,6 +5,7 @@ local M = {}
 local zmq = require'lzmq'
 local fd = require'carlos.fold'
 local assert = assert
+local print = print
 
 -- No more external access after this point
 _ENV = nil
@@ -39,17 +40,70 @@ function M.stream(endpoint)
     return MM
 end
 
-function M.cache(frontend, backend)
-    local ctx = assert(zmq.context())
-    local front = assert(ctx:socket'SUB')
-    local back  = assert(ctx:socket'XPUB')
+function M.socket(sktt, ctx)
+    local ctx = ctx or assert(zmq.context())
+    local skt = ctx:socket(sktt)
 
-    assert(front:connect(frontend or 'tcp://localhost:5557'))
-    assert(back:bind(backend or 'tcp://*:5558'))
-    assert(front:subscribe'')
+    local M = {endpoints={}}
 
-    local poll = assert(zmq.pollin{front, back})
+    -- PUB,
+    if sktt == 'PUB' or sktt == 'XPUB' then
+    function M.bind(endpoint)
+	local ends = M.endpoints
+	local endpoint = endpoint or "tcp://*:5555"
+	local p, err = assert(skt:bind(endpoint))
+	if p then ends[#ends+1] = endpoint; return p end
+	return p,err
+    end
 
+    function M.unbind(endpoint)
+	local ends = M.endpoints
+	assert(endpoint and ends[endpoint], "EROR: Endpoint not previously bound!")
+	local p,err = assert(skt:unbind(endpoint))
+	if p then ends[endpoint] = nil; return p end
+	return p,err
+    end
+
+    -- SUB,
+    else
+    M.tags = {}
+
+    function M.connect(endpoint)
+	local ends = M.endpoints
+	local endpoint = endpoint or "tcp://localhost:5556"
+	local p,err = assert(skt:connect(endpoint))
+	if p then ends[#ends+1] = endpoint; return p end
+	return p,err
+    end
+
+    function M.disconnect(endpoint)
+	local ends = M.endpoints
+	assert(endpoint and ends[endpoint], "EROR: Endpoint not previously connected!")
+	local p,err = assert(skt:disconnect(endpoint))
+	if p then ends[endpoint] = nil; return p end
+	return p,err
+    end
+
+    function M.subscribe(tag)
+	local tags = M.tags
+	local tag = tag or ""
+	local p,err = assert(skt:subscribe(tag))
+	if p then tags[#tags+1] = tag; return p end
+	return p,err
+    end
+
+    function M.unsubscribe(tag)
+	local tags = M.tags
+	assert(tag and tags[tag], "EROR: Tag not previously subscribed!")
+	local p,err = assert(skt:unsubscribe(tag))
+	if p then tags[tag] = nil; return p end
+	return p,err
+    end
+    end -- fi
+
+    function M.ls() return fd.reduce(fd.keys(M), function(_,x) print(x) end) end
+
+    return M
 end
 
 ----------------------------------
