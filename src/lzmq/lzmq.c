@@ -11,6 +11,7 @@
 
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
+#define checkpoll(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.pollitem")
 
 extern int errno;
 
@@ -154,7 +155,7 @@ static int new_socket(lua_State *L) {
 	return 2;
     }
 
-    if(type == ZMQ_SUB) {
+    if(type == ZMQ_SUB || type == ZMQ_XSUB) {
 	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_subscribe, 0);
 	lua_setfield(L, -2, "subscribe");
@@ -175,6 +176,88 @@ static int ctx_gc (lua_State *L) {
     void *ctx = checkctx(L);
     if (ctx && (zmq_ctx_term(ctx) == 0))
 	ctx = NULL;
+    return 0;
+}
+
+// POLL
+//
+// Built-in ZMO poll
+//
+// Input/Output multiplexing
+//
+// A mechanism for applications to multiplex input/output events
+// in a level-triggered fashion over a set of sockets. Each member
+// of the array pointed to by the items argument is a zmq_pollitem_t
+// structure.
+// zmq_poll shall examine either the ZMQ socket/standard socket
+// specified, for the event(s) specified in events.
+// If none of the requested events have occurred, zmq_poll shall
+// wait timeout milliseconds for an event to occur on any of the
+// requested items. If the value of timeout is 0, it shall return
+// immediately. If the value of timeout is -1, it shall block
+// indefinitely until a requested event has occurred.
+// The "events and revents" are bit masks constructed by OR'ing a
+// combination of the following event flags:
+// 	ZMQ_POLLIN	at least one message may be received wo blocking
+// 	ZMQ_POLLOUT	at least one message may be sent wo blocking
+// 	ZMQ_POLLERR	some sort of error condition is present
+// 	ZMQ_POLLPRI	of NO use
+//
+// function that in case of success, before timeout, identifies
+// the item which successfully received the event, and returns
+// its index, or nil if timeout.
+static int poll_now(lua_State *L) {
+    const long timeout = luaL_checkinteger(L, 1); // milliseconds
+    zmq_pollitem_t *items = lua_touserdata(L, lua_upvalueindex(1));
+    int i,N = lua_tointeger(L, lua_upvalueindex(2));
+    int rc = zmq_poll(items, N, timeout);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    lua_pushinteger(L, 0); //in case of timeout
+    for (i=0; i<N;) {
+	if (items[i++].revents && ZMQ_POLLIN) {
+	    lua_pushinteger(L, i);
+	    break;
+	}
+    }
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+    zmq_pollitem_t *it = lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+    luaL_getmetatable(L, "caap.zmq.pollitem");
+    lua_setmetatable(L, -2);
+
+    for (i=0; i<N; it++) {
+	    lua_rawgeti(L, 1, ++i);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	it->socket = skt;
+	    lua_pop(L, 1);
+	it->fd = 0;
+	it->events = ZMQ_POLLIN;
+	it->revents = 0;
+    }
+
+    lua_pushinteger(L, N);
+    lua_pushcclosure(L, &poll_now, 2); // upvalue: pollitem, N
+    return 1;
+}
+
+static int poll_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Poll Item}");
+    return 1;
+}
+
+static int poll_gc (lua_State *L) {
+    zmq_pollitem_t *items = checkpoll(L);
+    if (items)
+	items = NULL;
     return 0;
 }
 
@@ -210,32 +293,10 @@ static int new_proxy(lua_State *L) {
 
 }
 
-// POLL
-//
-// Input/Output multiplexing
-//
-// A mechanism for applications to multiplex input/output events
-// in a level-triggered fashion over a set of sockets. Each member
-// of the array pointed to by the items argument is a zmq_pollitem_t
-// structure.
-// zmq_poll shall examine either the ZMQ socket/standard socket
-// specified, for the event(s) specified in events.
-// If none of the requested events have occurred, zmq_poll shall
-// wait timeout milliseconds for an event to occur on any of the
-// requested items. If the value of timeout is 0, it shall return
-// immediately. If the value of timeout is -1, it shall block
-// indefinitely until a requested event has occurred.
-// The "events and revents" are bit masks constructed by OR'ing a
-// combination of the following event flags:
-// 	ZMQ_POLLIN	at least one message may be received wo blocking
-// 	ZMQ_POLLOUT	at least one message may be sent wo blocking
-// 	ZMQ_POLLERR	some sort of error condition is present
-// 	ZMQ_POLLPRI	of NO use
-
 /*
 static int poll_event(lua_State *L) {
-    zmq_pollitem_t item, *items = (zmq_pollitem_t *)lua_touserdata(L, lua_upvalueindex(L, 1));
-    const int FN_IDX = lua_upvalueindex(L, 2);
+    zmq_pollitem_t item, *items = (zmq_pollitem_t *)lua_touserdata(L, lua_upvalueindex(1));
+    const int FN_IDX = lua_upvalueindex(2);
     int i,N = luaL_len(L, FN_IDX);
 
     zmq_poll(items, N, -1); // block indefinitely
@@ -564,13 +625,14 @@ static void socket_fn(lua_State *L) {
     lua_pushcclosure(L, &new_socket, 1);
     lua_setfield(L, -2, "socket");
 }
-//
+
 // // // // // // // // // // // // //
 
 static const struct luaL_Reg zmq_funcs[] = {
     {"context", new_context},
-    {"proxy", new_proxy},
-    {NULL, NULL}
+    {"proxy",   new_proxy},
+    {"pollin",  new_poll_in},
+    {NULL, 	NULL}
 };
 
 static const struct luaL_Reg ctx_meths[] = {
@@ -594,7 +656,13 @@ static const struct luaL_Reg skt_meths[] = {
     {NULL,	   NULL}
 };
 
+static const struct luaL_Reg poll_meths[] = {
+    {"__tostring", poll_asstr},
+    {"__gc",	   poll_gc},
+    {NULL,	   NULL}
+};
 
+/*   ******************************   */
 int luaopen_lzmq (lua_State *L) {
     luaL_newmetatable(L, "caap.zmq.context");
     lua_pushvalue(L, -1);
@@ -607,13 +675,17 @@ int luaopen_lzmq (lua_State *L) {
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, skt_meths, 0);
 
+    luaL_newmetatable(L, "caap.zmq.pollitem");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, poll_meths, 0);
+
     // create library
     luaL_newlib(L, zmq_funcs);
     return 1;
 }
 
 /*
-
 static int skt_send (lua_State *L) {
     void *skt = checkskt(L);
     size_t len = 0;
@@ -691,5 +763,4 @@ static int skt_send_id (lua_State *L) {
     lua_pushboolean(L, 1);
     return 1;
 }
-
 */
