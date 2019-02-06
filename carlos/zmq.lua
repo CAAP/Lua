@@ -50,11 +50,8 @@ function M.stream(endpoint)
 
     function MM.close(id) assert(srv:send_msgs{id, ""}) end
 
-<<<<<<< HEAD
-    function MM.send(id, data) return srv:send_msgs{id, data} end
-=======
+--    function MM.send(id, data) return srv:send_msgs{id, data} end
     function MM.send(id, s) return srv:send_msgs{id, s} end
->>>>>>> 2692a28183bceea11a51270d31420a0241604acc
 
     function MM.receive()
 	local id, more = assert(srv:recv_msg())
