@@ -18,6 +18,7 @@ _ENV = nil
 ---------------------------------
 -- Public function definitions --
 ---------------------------------
+
 -- A socket of type ZMQ_STREAM is used to send and receive TCP
 -- data from a non-ZMQ peer, when using the tcp:// transport.
 -- It can act as a client and/or server, sending and/or receiving
@@ -62,70 +63,112 @@ function M.stream(endpoint)
     return MM
 end
 
+-------------------------------------------------------
+-- A socket of type REP is used by a service to receive requests from and send
+-- replies to a client.
+-- This socket type allows ONLY an alternating sequence of zmq_recv and
+-- subsequent zmq_send calls. Each request received is fair-queued from among
+-- all clients, and each reply sent is routed to the client that issued the last
+-- request.
+-- Compatible peer sockets: REQ & DEALER.
+-------------------------------------------------------
+-- A socket of type REQ is used by a client to send requests to and receive
+-- replies from a service.
+-- This socket type allows ONLY an alternating sequence of zmq_send and
+-- subsequent zmq_recv calls. Each request sent is round-robined among all
+-- services, and each reply received is matched with the last issued request.
+-- Compatible peer sockets: REP & ROUTER.
+-------------------------------------------------------
+-- A socket of type DEALER is an advanced socket. Each message sent is
+-- round-robined among all connected peers, and each message received is
+-- fair-queued from all connected peers.
+-- When a DEALER socket is connected to a REP socket each message sent must
+-- consist of an empty message part, the delimiter, followed by one or more
+-- body parts.
+-------------------------------------------------------
+-- A socket of type ROUTER is an advanced socket. When receiving a message,
+-- a ROUTER socket shall prepend a message part containing the identity of the
+-- originating peer to the message before passing it to the application.
+-- Messages received are fair-queued from among all connected peers.
+-- When sending messages a ROUTER socket shall remove the first part of
+-- the message and use it to determine the identity of the peer the message
+-- shall be routed to.
+-- When a REQ socket is connected to a ROUTER socket, in addition to the
+-- identity of the originating peer each message received shall contain an
+-- empty delimiter message part. The entire structure of each received message
+-- becomes: one or more identity parts, delimiter part, one or more body parts.
+-- When sending replies to a REQ socket the application must include the
+-- delimiter part.
+-------------------------------------------------------
+
 function M.socket(sktt, ctx)
     local ctx = ctx or assert(zmq.context())
-    local skt = ctx:socket(sktt)
+    local skt = assert(ctx:socket(sktt))
 
-    local M = {endpoints={}}
+    local MM = {endpoints={}}
 
-    -- PUB,
-    if sktt == 'PUB' or sktt == 'XPUB' then
-    function M.bind(endpoint)
-	local ends = M.endpoints
+    function MM.ls() return fd.reduce(fd.keys(MM), function(_,x) print(x) end) end
+
+    -- PUB, XPUB, REP, ROUTER
+    if sktt == 'PUB' or sktt == 'XPUB' or sktt = 'REP' or sktt = 'ROUTER' then
+    function MM.bind(endpoint)
+	local ends = MM.endpoints
 	local endpoint = endpoint or "tcp://*:5555"
 	local p, err = assert(skt:bind(endpoint))
 	if p then ends[#ends+1] = endpoint; return p end
 	return p,err
     end
 
-    function M.unbind(endpoint)
-	local ends = M.endpoints
-	assert(endpoint and ends[endpoint], "EROR: Endpoint not previously bound!")
+    function MM.unbind(endpoint)
+	local ends = MiM.endpoints
+	assert(endpoint and ends[endpoint], "ERROR: Endpoint not previously bound!")
 	local p,err = assert(skt:unbind(endpoint))
 	if p then ends[endpoint] = nil; return p end
 	return p,err
     end
 
-    -- SUB,
-    else
-    M.tags = {}
+    function MM.send( msg ) assert( skt:send_msg(msg) ) end
 
-    function M.connect(endpoint)
-	local ends = M.endpoints
+    -- REQ, DEALER, SUB, XSUB
+    else
+
+    function MM.connect(endpoint)
+	local ends = MM.endpoints
 	local endpoint = endpoint or "tcp://localhost:5556"
 	local p,err = assert(skt:connect(endpoint))
 	if p then ends[#ends+1] = endpoint; return p end
 	return p,err
     end
 
-    function M.disconnect(endpoint)
-	local ends = M.endpoints
-	assert(endpoint and ends[endpoint], "EROR: Endpoint not previously connected!")
+    function MM.disconnect(endpoint)
+	local ends = MM.endpoints
+	assert(endpoint and ends[endpoint], "ERROR: Endpoint not previously connected!")
 	local p,err = assert(skt:disconnect(endpoint))
 	if p then ends[endpoint] = nil; return p end
 	return p,err
     end
 
-    function M.subscribe(tag)
-	local tags = M.tags
+	if sktt == 'SUB' or sktt = 'XSUB' then
+    MM.tags = {}
+    function MM.subscribe(tag)
+	local tags = MM.tags
 	local tag = tag or ""
 	local p,err = assert(skt:subscribe(tag))
 	if p then tags[#tags+1] = tag; return p end
 	return p,err
     end
 
-    function M.unsubscribe(tag)
-	local tags = M.tags
-	assert(tag and tags[tag], "EROR: Tag not previously subscribed!")
+    function MM.unsubscribe(tag)
+	local tags = MM.tags
+	assert(tag and tags[tag], "ERROR: Tag not previously subscribed!")
 	local p,err = assert(skt:unsubscribe(tag))
 	if p then tags[tag] = nil; return p end
 	return p,err
     end
+    	end
     end -- fi
 
-    function M.ls() return fd.reduce(fd.keys(M), function(_,x) print(x) end) end
-
-    return M
+    return MM
 end
 
 ----------------------------------

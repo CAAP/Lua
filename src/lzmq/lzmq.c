@@ -30,7 +30,7 @@ char *err2str() {
     }
 }
 
-int event2int(const char *ev) { return (strncmp(ev, "pollin", 6) == 0 ? ZMQ_POLLIN : ZMQ_POLLOUT); }
+//int event2int(const char *ev) { return (strncmp(ev, "pollin", 6) == 0 ? ZMQ_POLLIN : ZMQ_POLLOUT); }
 
 // Thread-safe SOCKETS:
 // ZMQ_CLIENT, ZMQ_SERVER, ZMQ_DISH, ZMQ_RADIO, ZMQ_SCATTER, ZMQ_GATHER
