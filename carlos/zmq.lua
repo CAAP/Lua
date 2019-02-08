@@ -41,8 +41,8 @@ _ENV = nil
 -- You MUST send one identity frame followed by one data frame. The
 -- ZMQ_SNDMORE flag is required for identity frames byt is ignored
 -- on data frames.
-function M.stream(endpoint)
-    local ctx = assert(zmq.context())
+function M.stream(endpoint, ctx)
+    local ctx = ctx or assert(zmq.context())
     local srv = assert(ctx:socket'STREAM')
     assert(srv:bind(endpoint))
     local MM = {}
@@ -51,7 +51,6 @@ function M.stream(endpoint)
 
     function MM.close(id) assert(srv:send_msgs{id, ""}) end
 
---    function MM.send(id, data) return srv:send_msgs{id, data} end
     function MM.send(id, s) return srv:send_msgs{id, s} end
 
     function MM.receive()
@@ -110,7 +109,7 @@ function M.socket(sktt, ctx)
     function MM.ls() return fd.reduce(fd.keys(MM), function(_,x) print(x) end) end
 
     -- PUB, XPUB, REP, ROUTER
-    if sktt == 'PUB' or sktt == 'XPUB' or sktt = 'REP' or sktt = 'ROUTER' then
+    if sktt == 'PUB' or sktt == 'XPUB' or sktt == 'REP' or sktt == 'ROUTER' then
     function MM.bind(endpoint)
 	local ends = MM.endpoints
 	local endpoint = endpoint or "tcp://*:5555"
@@ -127,7 +126,7 @@ function M.socket(sktt, ctx)
 	return p,err
     end
 
-    function MM.send( msg ) assert( skt:send_msg(msg) ) end
+    function MM.send( msg ) return assert( skt:send_msg(msg) ) end
 
     -- REQ, DEALER, SUB, XSUB
     else
@@ -148,7 +147,9 @@ function M.socket(sktt, ctx)
 	return p,err
     end
 
-	if sktt == 'SUB' or sktt = 'XSUB' then
+    function MM.recv() return assert( skt:recv_msg() ) end
+
+	if sktt == 'SUB' or sktt == 'XSUB' then
     MM.tags = {}
     function MM.subscribe(tag)
 	local tags = MM.tags
