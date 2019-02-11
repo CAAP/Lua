@@ -59,6 +59,8 @@ function M.stream(endpoint, ctx)
 	return id, more
     end
 
+    function MM.socket() return srv end
+
     return MM
 end
 
@@ -106,6 +108,8 @@ function M.socket(sktt, ctx)
 
     local MM = {endpoints={}}
 
+    function MM.socket() return skt end
+
     function MM.ls() return fd.reduce(fd.keys(MM), function(_,x) print(x) end) end
 
     -- PUB, XPUB, REP, ROUTER
@@ -147,9 +151,9 @@ function M.socket(sktt, ctx)
 	return p,err
     end
 
-    function MM.recv() return assert( skt:recv_msg() ) end
+    function MM.receive() return assert( skt:recv_msg() ) end
 
-	if sktt == 'SUB' or sktt == 'XSUB' then
+	if sktt == 'SUB' then
     MM.tags = {}
     function MM.subscribe(tag)
 	local tags = MM.tags
