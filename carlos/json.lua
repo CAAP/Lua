@@ -38,6 +38,8 @@ end
 
 M.asJSON = asJSON
 
+function M.escape(s) return s:gsub('"', '&quot;'):gsub('&', '&amp;') end
+
 function M.sql2json( q )
     assert(open(q.dbname)) -- file MUST exists
     local db = assert(sql.connect(q.dbname), 'Could not connect to DB '..q.dbname)
