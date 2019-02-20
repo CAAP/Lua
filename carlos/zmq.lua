@@ -102,10 +102,10 @@ end
 -- delimiter part.
 -------------------------------------------------------
 
+--[[
 function M.socket(sktt, ctx)
     local ctx = ctx or assert(zmq.context())
     local skt = assert(ctx:socket(sktt))
-
     local MM = {endpoints={}}
 
     function MM.socket() return skt end
@@ -175,6 +175,7 @@ function M.socket(sktt, ctx)
 
     return MM
 end
+--]]
 
 ----------------------------------
 

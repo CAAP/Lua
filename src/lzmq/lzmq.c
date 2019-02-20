@@ -210,6 +210,7 @@ static int poll_now(lua_State *L) {
     const long timeout = luaL_checkinteger(L, 1); // milliseconds
     zmq_pollitem_t *items = lua_touserdata(L, lua_upvalueindex(1));
     int i,N = lua_tointeger(L, lua_upvalueindex(2));
+    int M = lua_tointeger(L, lua_upvalueindex(3));
     int rc = zmq_poll(items, N, timeout);
     if (rc == -1) {
 	lua_pushnil(L);
@@ -218,8 +219,8 @@ static int poll_now(lua_State *L) {
     }
     lua_pushinteger(L, 0); //in case of timeout
     for (i=0; i<N;) {
-	if (items[i++].revents && ZMQ_POLLIN) {
-	    lua_pushinteger(L, i);
+	if (items[i].revents && (i<M ? ZMQ_POLLIN : ZMQ_POLLOUT)) {
+	    lua_pushinteger(L, ++i);
 	    break;
 	}
     }
@@ -228,6 +229,7 @@ static int poll_now(lua_State *L) {
 
 static int new_poll_in(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
+    int M = luaL_checkinteger(L, 2); // # of socket events of type POLLIN
 
     int i, N = luaL_len(L, 1);
     zmq_pollitem_t *it = lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
@@ -235,17 +237,18 @@ static int new_poll_in(lua_State *L) {
     lua_setmetatable(L, -2);
 
     for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = i<M ? ZMQ_POLLIN : ZMQ_POLLOUT;
 	    lua_rawgeti(L, 1, ++i);
 	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
 	it->socket = skt;
 	    lua_pop(L, 1);
-	it->fd = 0;
-	it->events = ZMQ_POLLIN;
-	it->revents = 0;
     }
 
     lua_pushinteger(L, N);
-    lua_pushcclosure(L, &poll_now, 2); // upvalue: pollitem, N
+    lua_pushinteger(L, M);
+    lua_pushcclosure(L, &poll_now, 3); // upvalue: pollitem, N, M
     return 1;
 }
 
