@@ -3,13 +3,13 @@ local fd = require'carlos.fold'
 local ASEG = 'stats/aseg.stats'
 local APARC = 'stats/lh.aparc.stats'
 
-local asegs = {'Measure Cortex', 'Measure CerebralWhiteMatter','Left%-Cerebellum%-Cortex', 'Left%-Hippocampus', 'Right%-Cerebellum%-Cortex', 'Right%-Hippocampus'}
+local asegs = {'Measure Cortex', 'Measure CerebralWhiteMatter','Measure TotalGray', 'Left%-Cerebellum%-Cortex', 'Left%-Caudate', 'Left%-Putamen', 'Left%-Pallidum', 'Left%-Hippocampus', 'Left%-Amygdala', 'Right%-Cerebellum%-Cortex', 'Right%-Caudate', 'Right%-Putamen', 'Right%-Pallidum', 'Right%-Hippocampus', 'Right%-Amygdala'}
 
-local aparcs = {'entorhinal', 'inferiorparietal', 'inferiortemporal', 'lateralorbitofrontal', 'medialorbitofrontal', 'middletemporal', 'parahippocampal', 'parsopercularis', 'parsorbitalis', 'parstriangularis', 'rostralmiddlefrontal', 'superiorfrontal', 'superiorparietal', 'superiortemporal', 'frontalpole', 'temporalpole', 'transversetemporal', 'insula'}
+local aparcs = {'caudalanteriorcingulate', 'entorhinal', 'inferiorparietal', 'inferiortemporal', 'lateralorbitofrontal', 'medialorbitofrontal', 'middletemporal', 'parahippocampal', 'parsopercularis', 'parsorbitalis', 'parstriangularis', 'posteriorcingulate', 'rostralanteriorcingulate', 'rostralmiddlefrontal', 'superiorfrontal', 'superiorparietal', 'superiortemporal', 'frontalpole', 'temporalpole', 'transversetemporal', 'insula'}
 
 local function cuarto(line)
     if line:match'Measure' then return line else
-	return line:match'%d+%.%d%s+[%w%-]+'
+	return line:match'%d+%s+%d+%.%d%s+[%w%-]+'
     end
 end
 
