@@ -41,6 +41,13 @@ function M.connexec( conn, s ) return assert( conn.exec(s) ) end
 
 function M.ssevent( event, data ) return format('event: %s\ndata: %s\n\n', event, data) end
 
+function M.decode(msg)
+    local cmd = msg:match'%a+'
+    local data = {}
+    for k,v in msg:gmatch'(%a+)=([^=&]+)' do data[k] = v end
+    return cmd, data
+end
+
 -- Maybe should be in "ferre-server" where it is needed!!!XXX
 function M.chunks(f)
     local k = 1
