@@ -4,7 +4,7 @@ local M = {}
 local file_exists  = require'carlos.bsd'.file_exists
 
 local format 	   = require'string'.format
-local connect	   = require'carlos.sql'.connect
+local connect	   = require'carlos.sqlite'.connect
 local sleep	   = require'lbsd'.sleep
 
 local assert	   = assert
@@ -29,7 +29,7 @@ _ENV = nil -- or M
 -- whether path already exists, always returning
 -- the sql connection or error
 function M.dbconn(path, create)
-    local f = format(ROOT, path)
+    local f = format(path)
     if create or file_exists(f) then
 	return connect(f)
     else
