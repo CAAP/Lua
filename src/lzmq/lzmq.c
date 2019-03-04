@@ -1,0 +1,910 @@
+#include <lua.h>
+#include <lauxlib.h>
+
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+
+#include <zmq.h>
+
+#define randof(num) (int)((float)(num)*rand()/(RAND_MAX+1.0))
+
+#define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
+#define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
+
+typedef struct pollfd POLLFD;
+
+extern int errno;
+
+char *err2str() {
+    switch(errno) {
+	case EAGAIN: return "non-blocking mode was requested and the message cannot be sent";
+	case ENOTSUP: return "operation not supperted by this socket type";
+	case EINVAL: return "trying to send multipart data, which this socket type does not allow";
+	case ETERM: return "the context associated with this socket was terminated";
+	case EFSM: return "socket not being in an appropriate state";
+	case EFAULT: return "message passed was invalid";
+	case ENOTSOCK: return "this socket is invalid";
+	case EINTR: return "the operation was interrupted by a signal before it was done";
+	case EHOSTUNREACH: return "the message cannot be routed";
+	default: return "undefined error ocurred";
+    }
+}
+
+//int event2int(const char *ev) { return (strncmp(ev, "pollin", 6) == 0 ? ZMQ_POLLIN : ZMQ_POLLOUT); }
+
+// Thread-safe SOCKETS:
+// ZMQ_CLIENT, ZMQ_SERVER, ZMQ_DISH, ZMQ_RADIO, ZMQ_SCATTER, ZMQ_GATHER
+//
+// ZeroMQ patterns encapsulate hard-earned experience of the best ways to
+// distribute data and work. ZeroMQ patterns are implemented by pairs of
+// sockets with matching types. The built-in core ZeroMQ patterns are:
+// Request-reply: connects a set of clients to a set of services, this is
+// a remote procedure call and task distribution pattern.
+// Pub-sub: connects a set of publishers to a set of subscribers, this is
+// a data distribution pattern.
+// Pipeline: connects nodes in a fan-out/fan-in pattern that can have
+// multiple steps and loops, this is a parallel task distribution pattern.
+//
+// PATTERNS:
+// client-server
+// A single ZMQ_SERVER server talks to one or more ZMQ_CLIENT clients.
+// The usual and recommended model is to bind the ZMQ_SERVER and connect
+// the ZMQ_CLIENT.
+// ZMQ_CLIENT & ZMQ_SERVER sockets do not accept ZMQ_SNDMORE | ZMQ_RCVMORE
+// this limits them to single part data.
+//
+// Native
+// a ZMQ_STREAM is used to send and receive TCP data from a non-ZMQ peer
+// when using the tcp::// transport.
+//
+// Reply Message Envelopes
+// An envelope is a way of safely packaging up data with an address,
+// without touching the data itself. By separating reply addresses
+// into an envelope we make it possible to write general purpose
+// intermediaries such as APIs and proxies.
+// When you use REQ & REP sockets you don't even see envelopes.
+//
+// Simple Reply Envelope
+// A request-reply exchange consists of a request message, and an eventual
+// reply message. There's only one reply for each request.
+// The ZeroMQ reply envelope formally consists of zero or more reply
+// addresses, followed by an empty frame, followed by the message body.
+// The REQ socket creates the simplest possible reply envelope, which
+// has no address, just an empty delimiter frame and the message
+// frame; this is a two-frame message.
+//
+// REQ - REQ
+// The REQ socket sends, to the network, an empty delimiter frame in
+// front of the message data. REQ sockets are synchronous, they send
+// one request and then wait for one reply.
+// The REP socket reads and saves all identity frames up to and incluiding
+// the empty delimiter, then passes the following frame or frames to the
+// caller. REP sockets are synchronous and talk to one peer at a time.
+//
+// DEALER
+// The DEALER socket is oblivious to the reply envelope. Sockets are
+// asynchronous and like PUSH and PULL combined. They distribute sent
+// messages among all connections, and fair-queue received messages.
+// A DEALER gives us an asynchronous client that can talk to multiple
+// REP servers. We would be able to send any number of requests without
+// waiting for replies.
+//
+// ROUTER
+// The router socket, unlike other sockets, tracks every connection it has,
+// and tells the caller about these, by sticking the connection identity
+// in front of each message received. An identity is just a binary string
+// with no meaning. When you send a message via a ROUTER socket, you first
+// send an identity frame.
+// When "receiving" messages a ZMQ_ROUTER socket shall prepend a message
+// part containing the identity of the originating peer to the message
+// before passing it to the application.
+// When "sending" messages a ZMQ_ROUTER socket shall remove the first part
+// of the message and use it to determine the identity of the peer the
+// message shall be routed to.
+// The ROUTER socket invents a random identity for each connection with
+// which it works.
+// Each time ROUTER gives you a message, it tells you what peer that came
+// from, as an identity. ROUTER will route messages asynchronously to any
+// peer connected to it, if you prefix the identity as the first frame.
+// A ROUTER gives us an asynchronous server that can talk to multiple
+// REQ clients at the same time. We would be able to process any number
+// of request in parallel.
+// We can use ROUTER in two distinct ways:
+// As a "proxy" that switches messages between front- & backend sockets.
+// An an "application" that reads the message and acts on it. The
+// ROUTER must know the format of the 'reply envelope' it's being sent.
+
+
+//
+// CONTEXT
+//
+static int new_context(lua_State *L) {
+    void **pctx = (void **)lua_newuserdata(L, sizeof(void *));
+    luaL_getmetatable(L, "caap.zmq.context");
+    lua_setmetatable(L, -2);
+
+    *pctx = zmq_ctx_new();
+    if (*pctx == NULL) {
+	lua_pushnil(L);
+	lua_pushstring(L, "Error creating ZMQ context\n");
+	return 2;
+    }
+
+    return 1;
+}
+
+static int skt_subscribe(lua_State *L);
+static int skt_unsubscribe(lua_State *L);
+
+static int new_socket(lua_State *L) {
+    void *ctx = checkctx(L);
+    const char* ttype = luaL_checkstring(L, 2);
+
+    lua_getfield(L, lua_upvalueindex(1), ttype);
+    int type = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    void **pskt = (void **)lua_newuserdata(L, sizeof(void *));
+    luaL_getmetatable(L, "caap.zmq.socket");
+    lua_setmetatable(L, -2);
+
+    *pskt = zmq_socket(ctx, type);
+    if (*pskt == NULL) {
+	lua_pushnil(L);
+	lua_pushstring(L, "Error creating ZMQ socket\n");
+	return 2;
+    }
+
+    if(type == ZMQ_SUB || type == ZMQ_XSUB) {
+	luaL_getmetatable(L, "caap.zmq.socket");
+	lua_pushcclosure(L, &skt_subscribe, 0);
+	lua_setfield(L, -2, "subscribe");
+	lua_pushcclosure(L, &skt_unsubscribe, 0);
+	lua_setfield(L, -2, "unsubscribe");
+	lua_pop(L, 1); // pop metatable
+    }
+
+    return 1;
+}
+
+static int ctx_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Active Context}");
+    return 1;
+}
+
+static int ctx_gc (lua_State *L) {
+    void *ctx = checkctx(L);
+    if (ctx && (zmq_ctx_term(ctx) == 0))
+	ctx = NULL;
+    return 0;
+}
+
+// POLLER
+//
+<<<<<<< HEAD
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+=======
+// function that in case of success, before timeout, identifies
+// the item which successfully received the event, and returns
+// its index, or nil if timeout.
+static int poll_now(lua_State *L) {
+    const long timeout = luaL_checkinteger(L, 1); // milliseconds
+    zmq_pollitem_t *items = lua_touserdata(L, lua_upvalueindex(1));
+    int i,N = lua_tointeger(L, lua_upvalueindex(2));
+//    int M = lua_tointeger(L, lua_upvalueindex(3));
+    int rc = zmq_poll(items, N, timeout);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    lua_pushinteger(L, 0); //in case of timeout
+    for (i=0; i<N;) {
+	if (items[i].revents && ZMQ_POLLIN) { // (i<M ? ZMQ_POLLIN : ZMQ_POLLOUT)
+	    lua_pushinteger(L, ++i);
+	    break;
+	}
+    }
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+//    int M = luaL_checkinteger(L, 2); // # of socket events of type POLLIN
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
+
+    int i, N = luaL_len(L, 1);
+    zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+
+<<<<<<< HEAD
+    for (i=0; i<N;) {
+	pit = it+i;
+	pit->fd = 0;
+	pit->revents = 0;
+	pit->events = ZMQ_POLLIN;
+=======
+    for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = ZMQ_POLLIN; // i<M ? ZMQ_POLLIN : ZMQ_POLLOUT;
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
+	    lua_rawgeti(L, 1, ++i);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	pit->socket = skt;
+	    lua_pop(L, 1);
+    }
+
+<<<<<<< HEAD
+    for (i=0; i<N;i++) {
+	if (it[i].revents) {
+printf("ERROR: event has a non-zero value.\n");
+	    break;
+	}
+    }
+=======
+    lua_pushinteger(L, N);
+//    lua_pushinteger(L, M);
+    lua_pushcclosure(L, &poll_now, 2); // upvalue: pollitem, N
+    return 1;
+}
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
+
+    int rc = zmq_poll(it, N, -1);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+
+    return 1;
+}
+
+// PROXY
+//
+// Built-in ZMQ proxy
+// The proxy connects a frontend socket to a backend socket.
+// Conceptually, data flows from frontend to backend. The proxy
+// is fully symmetric and there is no technical difference
+// between frontend and backend.
+// Before calling zmq_proxy you must set any socket options, and
+// connect or bind both frontend and backend sockets.
+// zmq_proxy runs in the current thread and returns only if/when
+// the current context is closed.
+// If the capture socket is not NULL, the proxy shall send all
+// messages, received on both frontend and backend, to the capture
+// socket.
+
+static int new_proxy(lua_State *L) {
+    void *frontend = checkskt(L);
+    void *backend = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+    void *capture = NULL;
+    if (lua_isuserdata(L, 3))
+	capture = *(void **)luaL_checkudata(L, 3, "caap.zmq.socket");
+    int rc = zmq_proxy(frontend, backend, capture);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to create proxy: %s\n", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+
+}
+
+//
+// SOCKET
+//
+// To create a connection between two nodes, you use zmq_bind and zmq_connect in the other.
+// As a rule of thumb, the node that does zmq_bind is a "SERVER", and the node which does
+// zmq_connect is a "CLIENT", with arbitrary network address. We bind a socket to an
+// endpoint and connect a socket to an endpoint, the endpoint being a well-known address.
+// When a socket is bound to an endpoint it automatically starts accepting connections. ZMQ
+// will automatically reconnect if the network connection is broken.
+// A server node can bind to many endpoints (a combination of protocol and address) and it
+// can do this using a single socket.
+// The "ipc" transport does allow a process to bind to an endpoint already used by a first
+// process. It's meant to allow a process to recover after a crash.
+// For most cases, use "tcp". It is elastic, portable and fast. It is a disconnected
+// transport because ZeroMQ tcp transport doesn't require that the endpoint exists before
+// you connect to it. Clients and servers can connect and bind at any time, can go and come
+// back, and it remains transparent to applications.
+// The inter-process "ipc" transport is disconnected, like tcp.
+// The inter-thread transport, "inproc", is a connected signaling transport. It is much
+// faster than tcp or ipc. However, the server MUST issue a BIND before any client issues
+// a CONNECT. We create and bind one socket and start the child threads, which create and
+// connect the other sockets.
+
+
+static int skt_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Active Socket}");
+    return 1;
+}
+
+static int skt_gc(lua_State *L) {
+    void *skt = checkskt(L);
+    if (skt && (zmq_close(skt) == 0))
+	skt = NULL;
+    return 0;
+}
+
+// Following a "zmq_bind", the socket enters a "mute" state unless or until at least one
+// incoming or outgoing connection is made, at which point the socket enters a ready state.
+// In the mute state, the socket blocks or drops messages according to the socket type. By
+// contrast, following a "zmq_connect", the socket enters the "ready" state.
+
+// Accept incoming connections on a socket
+// binds the socket to a local endpoint (port)
+// and then accepts incoming connections
+static int skt_bind (lua_State *L) {
+    void *skt = checkskt(L);
+    const char *addr = luaL_checkstring(L, 2);
+    if (zmq_bind(skt, addr) == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to bind socket to endpoint: %s: %s\n", addr, err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// Unbind a socket specified by the socket
+// argument from the endpoint specified by
+// the endpoint argument
+static int skt_unbind(lua_State *L) {
+    void *skt = checkskt(L);
+    const char *addr = luaL_checkstring(L, 2);
+    if (-1 == zmq_unbind(skt, addr)) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to unbind socket to endpoint: %s: %s\n", addr, err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// Create outgoing connection from socket
+// connects the socket to an endpoint (port)
+// and then accepts incoming connections
+static int skt_connect (lua_State *L) {
+    void *skt = checkskt(L);
+    const char *addr = luaL_checkstring(L, 2);
+    if (zmq_connect(skt, addr) == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// Disconnect a socket from the endpoint.
+// Any outstanding messages physically
+// received from the network but not yet
+// received by the application shall be
+// discarded. The behaviour for discarding
+// messages sent but not yet typically
+// transferred to the network depends on
+// the value of the ZMQ_LINGER option.
+static int skt_disconnect (lua_State *L) {
+    void *skt = checkskt(L);
+    const char *addr = luaL_checkstring(L, 2);
+    if (zmq_disconnect(skt, addr) == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// Send a message part on a socket
+// queue a message created from the buffer
+// referenced by
+// ZMQ_SNDMORE the message being sent
+// is a multi-part message, further
+// message parts are to follow
+// a successful invocation indicates that
+// the message has been queued on the socket
+// An application that sends multi-part
+// messages must use the ZMQ_SNDMORE flag
+// when sending each message except the final
+// The zmq_msg_t structure passed to
+// zmq_msg_send is nullified during the call
+// There is no way to cancel a partially sent
+// message, except by closing the socket
+
+int send_msg(lua_State *L, void *skt, int idx, int multip) {
+    size_t len = 0;
+    const char *data = luaL_checklstring(L, idx, &len);
+    zmq_msg_t msg;
+    int rc = zmq_msg_init_data( &msg, len==0 ? 0 :(void *)data, len, NULL, NULL ); // XXX send 0-length data
+    if (rc == -1)
+	return rc;
+    return zmq_msg_send( &msg, skt, multip ); // either error or success
+}
+
+// sends ALL or NONE
+static int skt_send_mult_msg(lua_State *L) {
+    void *skt = checkskt(L);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    int i, N = luaL_len(L, 2);
+    for (i=1; i<N; i++) {
+	lua_rawgeti(L, 2, i);
+	if (-1 == send_msg(L, skt, 3, ZMQ_SNDMORE)) {
+	    lua_pushnil(L);
+	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	    return 2;
+	}
+	lua_pop(L, 1);
+    }
+    lua_rawgeti(L, 2, N);
+    if (-1 == send_msg(L, skt, 3, 0)) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	return 2;
+    }
+    lua_pop(L, 1);
+    lua_pushinteger(L, N); // number of messages sent
+    return 1;
+}
+
+static int skt_send_msg(lua_State *L) {
+    void *skt = checkskt(L);
+    int mult = lua_toboolean(L, 3);
+    int rc = send_msg(L, skt, 2, mult);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	return 2;
+    }
+    lua_pushinteger(L, rc); // length of message sent
+    return 1;
+}
+
+// Receive a message part from a socket
+// receive a message from the socket referenced
+// by the socket argument and store it in the
+// buffer buf. Any bytes exceeding the length
+// shall be truncated.
+// An application that process multi-part messages
+// must use the ZMQ_RCVMORE option to determine if
+// there are futher parts to receive.
+// Shall return number of bytes in the message.
+//
+// MESSAGES
+//
+
+int recv_msg(lua_State *L, void *skt) {
+    int rc;
+    zmq_msg_t msg;
+    rc = zmq_msg_init( &msg ); // always returns ZERO, no errors are defined
+    rc = zmq_msg_recv(&msg, skt, 0); // BLOCK until receive a message from a socket
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: receiving message from a socket failed, %s!", err2str());
+	return 2;
+    }
+    if (rc > 0)
+	lua_pushlstring(L, zmq_msg_data( &msg ), zmq_msg_size( &msg ));
+    else
+	lua_pushnil(L);
+    rc = zmq_msg_close( &msg );
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: message could not be closed properly, %s!", err2str());
+	return 2;
+    }
+    return zmq_msg_more( &msg );
+}
+
+static int mult_part_msg(lua_State *L) {
+    void *skt = checkskt(L);	   // state
+    int cnt = lua_tointeger(L, 2); // counter
+    if (cnt > 0 && lua_toboolean(L, 3) == 0) // NO more msg's in queue
+	return 0;
+    lua_pushinteger(L, ++cnt);	   // increment counter
+    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
+    return 3;
+}
+
+static int skt_recv_mult_msg(lua_State *L) {
+    lua_pushcclosure(L, &mult_part_msg, 0);	// iter function
+    lua_pushvalue(L, 1);			// state := socket
+    lua_pushinteger(L, 0);			// initialize counter to zero
+    return 3;
+}
+
+static int skt_recv_msg(lua_State *L) {
+    void *skt = checkskt(L);
+    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
+    return 2;
+}
+
+// Set simple random printable identity on socket
+static int skt_set_id(lua_State *L) {
+    void *skt = checkskt(L);
+    char identity[10];
+    sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
+    size_t len = strlen(identity);
+    int rc = zmq_setsockopt(skt, ZMQ_IDENTITY, identity, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushlstring(L, identity, len);
+    return 1;
+}
+
+static int skt_subscribe(lua_State *L) {
+    void *skt = checkskt(L);
+    const char* filter = luaL_checkstring(L, 2);
+    int rc = zmq_setsockopt(skt, ZMQ_SUBSCRIBE, filter, strlen(filter));
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting subscribe filter for socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int skt_unsubscribe(lua_State *L) {
+    void *skt = checkskt(L);
+    const char* filter = luaL_checkstring(L, 2);
+    int rc = zmq_setsockopt(skt, ZMQ_UNSUBSCRIBE, filter, strlen(filter));
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: unsetting subscribe filter for socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int skt_events(lua_State *L) {
+    void *skt = checkskt(L);
+    int flag = ZMQ_POLLIN;
+    size_t len = sizeof(flag);
+    if (zmq_getsockopt(skt, ZMQ_EVENTS, &flag, &len) == 0)
+	lua_pushstring(L, flag & ZMQ_POLLIN ? "POLLIN" : "POLLOUT");
+    else
+	lua_pushnil(L);
+    return 1;
+}
+
+// // // // // // // // // // // // //
+//  add "socket types" as upvalue to method "socket"
+static void socket_fn(lua_State *L) {
+    lua_newtable(L); // upvalue
+    lua_pushinteger(L, ZMQ_PAIR); lua_setfield(L, -2, "PAIR");
+    lua_pushinteger(L, ZMQ_PUB);  lua_setfield(L, -2, "PUB");
+    lua_pushinteger(L, ZMQ_SUB);  lua_setfield(L, -2, "SUB");
+    lua_pushinteger(L, ZMQ_REQ);  lua_setfield(L, -2, "REQ");
+    lua_pushinteger(L, ZMQ_REP);  lua_setfield(L, -2, "REP");
+    lua_pushinteger(L, ZMQ_DEALER); lua_setfield(L, -2, "DEALER");
+    lua_pushinteger(L, ZMQ_ROUTER); lua_setfield(L, -2, "ROUTER");
+    lua_pushinteger(L, ZMQ_PULL); lua_setfield(L, -2, "PULL");
+    lua_pushinteger(L, ZMQ_PUSH); lua_setfield(L, -2, "PUSH");
+    lua_pushinteger(L, ZMQ_XPUB); lua_setfield(L, -2, "XPUB");
+    lua_pushinteger(L, ZMQ_XSUB); lua_setfield(L, -2, "XSUB");
+    lua_pushinteger(L, ZMQ_STREAM); lua_setfield(L, -2, "STREAM");
+    lua_pushcclosure(L, &new_socket, 1);
+    lua_setfield(L, -2, "socket");
+}
+
+// // // // // // // // // // // // //
+
+static const struct luaL_Reg zmq_funcs[] = {
+    {"context", new_context},
+    {"proxy",   new_proxy},
+    {"pollin",  new_poll_in},
+    {NULL, 	NULL}
+};
+
+static const struct luaL_Reg ctx_meths[] = {
+    {"__tostring", ctx_asstr},
+    {"__gc",	   ctx_gc},
+    {NULL,	   NULL}
+};
+
+static const struct luaL_Reg skt_meths[] = {
+    {"bind",	   skt_bind},
+    {"unbind",	   skt_unbind},
+    {"connect",	   skt_connect},
+    {"disconnect", skt_disconnect},
+    {"send_msg",   skt_send_msg},
+    {"send_msgs",  skt_send_mult_msg},
+    {"recv_msg",   skt_recv_msg},
+    {"recv_msgs",  skt_recv_mult_msg},
+    {"set_id",	   skt_set_id},
+    {"events",	   skt_events},
+    {"__tostring", skt_asstr},
+    {"__gc",	   skt_gc},
+    {NULL,	   NULL}
+};
+
+/*   ******************************   */
+int luaopen_lzmq (lua_State *L) {
+    luaL_newmetatable(L, "caap.zmq.context");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, ctx_meths, 0);
+    socket_fn(L);
+
+    luaL_newmetatable(L, "caap.zmq.socket");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, skt_meths, 0);
+
+    // create library
+    luaL_newlib(L, zmq_funcs);
+    return 1;
+}
+
+<<<<<<< HEAD
+/*
+
+// POLL
+//
+// Built-in ZMO poll
+//
+// Input/Output multiplexing
+//
+// A mechanism for applications to multiplex input/output events
+// in a level-triggered fashion over a set of sockets. Each member
+// of the array pointed to by the items argument is a zmq_pollitem_t
+// structure.
+// zmq_poll shall examine either the ZMQ socket/standard socket
+// specified, for the event(s) specified in events.
+// If none of the requested events have occurred, zmq_poll shall
+// wait timeout milliseconds for an event to occur on any of the
+// requested items. If the value of timeout is 0, it shall return
+// immediately. If the value of timeout is -1, it shall block
+// indefinitely until a requested event has occurred.
+// The "events and revents" are bit masks constructed by OR'ing a
+// combination of the following event flags:
+// 	ZMQ_POLLIN	at least one message may be received wo blocking
+// 	ZMQ_POLLOUT	at least one message may be sent wo blocking
+// 	ZMQ_POLLERR	some sort of error condition is present
+// 	ZMQ_POLLPRI	of NO use
+//
+// function that in case of success, before timeout, identifies
+// the item which successfully received the event, and returns
+// its index, or nil if timeout.
+
+static int poll_now(lua_State *L) {
+    const long timeout = luaL_checkinteger(L, 1); // milliseconds
+    zmq_pollitem_t *items = (zmq_pollitem_t *)lua_touserdata(L, lua_upvalueindex(1));
+    int i,N = lua_tointeger(L, lua_upvalueindex(2));
+
+    for (i=0; i<N;i++) {
+	if (items[i].revents) {
+printf("ERROR: event has a non-zero value.\n");
+	    items[i].revents = 0;
+	    break;
+	}
+    }
+
+    int rc = zmq_poll(items, N, -1);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+//    lua_pushinteger(L, 0); //in case of timeout
+    for (i=0; i<N;) {
+	zmq_pollitem_t item = items[i++];
+	if (item.revents & ZMQ_POLLIN) {
+	    lua_pushinteger(L, i);
+	    item.revents = 0;
+	    break;
+	}
+    }
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+    zmq_pollitem_t *it, *items = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+    luaL_getmetatable(L, "caap.zmq.pollitem");
+    lua_setmetatable(L, -2);
+
+    it = items;
+    for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = ZMQ_POLLIN;
+	    lua_rawgeti(L, 1, ++i);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	it->socket = skt;
+	    lua_pop(L, 1);
+    }
+
+    for (i=0; i<N;i++) {
+	if (it[i].revents) {
+printf("ERROR: event has a non-zero value.\n");
+	    break;
+	}
+    }
+
+    int rc = zmq_poll(items, N, -1);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    for (i=0; i<N;) {
+	zmq_pollitem_t item = items[i++];
+printf("checking event: %d\n", i);
+	if (item.revents & ZMQ_POLLIN) {
+	    lua_pushinteger(L, i);
+	    break;
+	}
+    }
+
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+    zmq_pollitem_t *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+    luaL_getmetatable(L, "caap.zmq.pollitem");
+    lua_setmetatable(L, -2);
+
+    for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = ZMQ_POLLIN;
+	    lua_rawgeti(L, 1, ++i);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	it->socket = skt;
+	    lua_pop(L, 1);
+    }
+
+    lua_pushinteger(L, N);
+    lua_pushcclosure(L, &poll_now, 2); // upvalue: pollitem, N
+    return 1;
+}
+
+static int poll_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Poll Item}");
+    return 1;
+}
+
+static int poll_gc (lua_State *L) {
+    zmq_pollitem_t *items = (zmq_pollitem_t *)luaL_checkudata(L, 1, "caap.zmq.socket");
+    if (items)
+	items = NULL;
+    return 0;
+}
+
+
+// POLLER
+//
+//
+
+static int new_poller(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+    POLLFD *pfd = (POLLFD *)lua_newuserdata(L, N*sizeof(POLLFD));
+    int fd = -1;
+    size_t len = sizeof(fd);
+
+    for (i=0; i<N; i++) {
+	    lua_rawgeti(L, 1, i+1);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	    zmq_getsockopt(skt, ZMQ_FD, &fd, &len);
+	pfd[i].fd = fd;
+	pfd[i].events = POLLIN;
+	    lua_pop(L, 1);
+    }
+
+    int rc = poll( pfd, N, -1);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    rc = 0;
+    for (i=0; i<N; i++) {
+	    lua_rawgeti(L, 1, i+1);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	    zmq_getsockopt(skt, ZMQ_EVENTS, &fd, &len);
+	if (fd & ZMQ_POLLIN) { rc++; }
+	    lua_pop(L, 1);
+    }
+
+    lua_pushinteger(L, rc);
+    return 1;
+}
+ 
+static int skt_send (lua_State *L) {
+    void *skt = checkskt(L);
+    size_t len = 0;
+    const char *msg = luaL_checklstring(L, 2, &len);
+    int rc, multip;
+
+    multip = lua_toboolean(L, 3) ? ZMQ_SNDMORE : 0;
+
+    if (0 == len)
+	rc = zmq_send(skt, 0, 0, 0);
+    else
+	rc = zmq_send(skt, msg, len, multip);
+
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: socket could not send message!");
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int skt_recv (lua_State *L) {
+    void *skt = checkskt(L);
+    int allp = 0;
+
+    char raw [256];
+    size_t raw_size = 256;
+
+   if (lua_toboolean(L, 2)) {
+	allp = 1;
+	lua_newtable(L);
+   }
+
+    do {
+	raw_size = zmq_recv(skt, raw, 256, 0);
+	if (raw_size > 0)
+	    lua_pushlstring(L, raw, raw_size);
+	else
+	    lua_pushnil(L);
+	if (allp)
+	    lua_rawseti(L, -2, allp++);
+    } while (allp && (raw_size == 256));
+
+    return 1;
+}
+
+static int skt_recv_id (lua_State *L) {
+    void *skt = checkskt(L);
+
+    char id [256];
+    size_t id_size = zmq_recv(skt, id, 256, 0);
+    if (id_size < 1) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: socket received an invalid ID!");
+	return 2;
+    }
+
+    lua_pushlstring(L, id, id_size);
+    return 1;
+}
+
+static int skt_send_id (lua_State *L) {
+    void *skt = checkskt(L);
+    size_t id_size;
+    const char *id = luaL_checklstring(L, 2, &id_size);
+
+    int rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
+	return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+*/
+=======
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
