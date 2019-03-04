@@ -1,0 +1,7 @@
+/home/alberto/Lua/src/lzmq/build.luarocks/CMakeFiles/install/local.dir
+/home/alberto/Lua/src/lzmq/build.luarocks/CMakeFiles/rebuild_cache.dir
+/home/alberto/Lua/src/lzmq/build.luarocks/CMakeFiles/edit_cache.dir
+/home/alberto/Lua/src/lzmq/build.luarocks/CMakeFiles/install/strip.dir
+/home/alberto/Lua/src/lzmq/build.luarocks/CMakeFiles/lzmq.dir
+/home/alberto/Lua/src/lzmq/build.luarocks/CMakeFiles/install.dir
+/home/alberto/Lua/src/lzmq/build.luarocks/CMakeFiles/list_install_components.dir
