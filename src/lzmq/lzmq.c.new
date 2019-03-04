@@ -182,30 +182,75 @@ static int ctx_gc (lua_State *L) {
 
 // POLLER
 //
+<<<<<<< HEAD
 
 static int new_poll_in(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
+=======
+// function that in case of success, before timeout, identifies
+// the item which successfully received the event, and returns
+// its index, or nil if timeout.
+static int poll_now(lua_State *L) {
+    const long timeout = luaL_checkinteger(L, 1); // milliseconds
+    zmq_pollitem_t *items = lua_touserdata(L, lua_upvalueindex(1));
+    int i,N = lua_tointeger(L, lua_upvalueindex(2));
+//    int M = lua_tointeger(L, lua_upvalueindex(3));
+    int rc = zmq_poll(items, N, timeout);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    lua_pushinteger(L, 0); //in case of timeout
+    for (i=0; i<N;) {
+	if (items[i].revents && ZMQ_POLLIN) { // (i<M ? ZMQ_POLLIN : ZMQ_POLLOUT)
+	    lua_pushinteger(L, ++i);
+	    break;
+	}
+    }
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+//    int M = luaL_checkinteger(L, 2); // # of socket events of type POLLIN
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
 
     int i, N = luaL_len(L, 1);
     zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
 
+<<<<<<< HEAD
     for (i=0; i<N;) {
 	pit = it+i;
 	pit->fd = 0;
 	pit->revents = 0;
 	pit->events = ZMQ_POLLIN;
+=======
+    for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = ZMQ_POLLIN; // i<M ? ZMQ_POLLIN : ZMQ_POLLOUT;
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
 	    lua_rawgeti(L, 1, ++i);
 	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
 	pit->socket = skt;
 	    lua_pop(L, 1);
     }
 
+<<<<<<< HEAD
     for (i=0; i<N;i++) {
 	if (it[i].revents) {
 printf("ERROR: event has a non-zero value.\n");
 	    break;
 	}
     }
+=======
+    lua_pushinteger(L, N);
+//    lua_pushinteger(L, M);
+    lua_pushcclosure(L, &poll_now, 2); // upvalue: pollitem, N
+    return 1;
+}
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
 
     int rc = zmq_poll(it, N, -1);
     if (rc == -1) {
@@ -601,6 +646,7 @@ int luaopen_lzmq (lua_State *L) {
     return 1;
 }
 
+<<<<<<< HEAD
 /*
 
 // POLL
@@ -860,3 +906,5 @@ static int skt_send_id (lua_State *L) {
     return 1;
 }
 */
+=======
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359

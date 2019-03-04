@@ -104,7 +104,7 @@ function M.html()
 	local ccc = #scs2 > 0 and format("(function() { let oldload = window.onload; window.onload = function() { oldload && oldload(); %s }; })();", concat(scs2, '\n')) or ''
 	local ret = '<!DOCTYPE html><html lang="$LANG">$ENV</html>'
 	env['$LANG'] = 'es-MX'
-	env[1] = wrap(concat({head, wrap(concat({'"use strict";', ccc, concat(scs, '\n')}, '\n'), 'script'), wrap(concat(css, '\n'), 'style')}, '\n'), 'head')
+	env[1] = wrap(concat({head, wrap(concat({'"use strict";', concat(scs, '\n'), ccc}, '\n'), 'script'), wrap(concat(css, '\n'), 'style')}, '\n'), 'head')
 	env[2] = wrap(concat(body, '\n'), 'body')
 	env['$ENV'] = concat(env, '\n')
 	return ret:gsub(REGEX, env)
