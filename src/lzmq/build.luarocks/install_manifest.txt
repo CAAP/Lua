@@ -1,1 +1,0 @@
-/home/alberto/Lua/lib/lua/5.3/lzmq.so
