@@ -563,7 +563,7 @@ static int skt_unsubscribe(lua_State *L) {
 
 static int skt_stream_notify(lua_State *L) {
     void *skt = checkskt(L);
-    int notify = luaL_checkinteger(L, 2);
+    int notify = lua_toboolean(L, 2);
     size_t len = sizeof(notify);
 
     int rc = zmq_setsockopt(skt, ZMQ_STREAM_NOTIFY, &notify, len);
