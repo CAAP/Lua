@@ -12,6 +12,8 @@
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
 
+typedef struct pollfd POLLFD;
+
 extern int errno;
 
 char *err2str() {
@@ -180,31 +182,75 @@ static int ctx_gc (lua_State *L) {
 
 // POLLER
 //
+<<<<<<< HEAD
+
 static int new_poll_in(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
+=======
+// function that in case of success, before timeout, identifies
+// the item which successfully received the event, and returns
+// its index, or nil if timeout.
+static int poll_now(lua_State *L) {
+    const long timeout = luaL_checkinteger(L, 1); // milliseconds
+    zmq_pollitem_t *items = lua_touserdata(L, lua_upvalueindex(1));
+    int i,N = lua_tointeger(L, lua_upvalueindex(2));
+//    int M = lua_tointeger(L, lua_upvalueindex(3));
+    int rc = zmq_poll(items, N, timeout);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    lua_pushinteger(L, 0); //in case of timeout
+    for (i=0; i<N;) {
+	if (items[i].revents && ZMQ_POLLIN) { // (i<M ? ZMQ_POLLIN : ZMQ_POLLOUT)
+	    lua_pushinteger(L, ++i);
+	    break;
+	}
+    }
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+//    int M = luaL_checkinteger(L, 2); // # of socket events of type POLLIN
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
 
     int i, N = luaL_len(L, 1);
     zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
 
+<<<<<<< HEAD
     for (i=0; i<N;) {
 	pit = it+i;
 	pit->fd = 0;
 	pit->revents = 0;
 	pit->events = ZMQ_POLLIN;
+=======
+    for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = ZMQ_POLLIN; // i<M ? ZMQ_POLLIN : ZMQ_POLLOUT;
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
 	    lua_rawgeti(L, 1, ++i);
 	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
 	pit->socket = skt;
 	    lua_pop(L, 1);
     }
 
-/*
-    for (i=0; i<N; i++) {
+<<<<<<< HEAD
+    for (i=0; i<N;i++) {
 	if (it[i].revents) {
 printf("ERROR: event has a non-zero value.\n");
 	    break;
 	}
     }
-*/
+=======
+    lua_pushinteger(L, N);
+//    lua_pushinteger(L, M);
+    lua_pushcclosure(L, &poll_now, 2); // upvalue: pollitem, N
+    return 1;
+}
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
 
     int rc = zmq_poll(it, N, -1);
     if (rc == -1) {
@@ -371,28 +417,24 @@ static int skt_disconnect (lua_State *L) {
 // There is no way to cancel a partially sent
 // message, except by closing the socket
 
-int send_msg(lua_State *L, void *skt, int idx, int flags) {
+int send_msg(lua_State *L, void *skt, int idx, int multip) {
     size_t len = 0;
     const char *data = luaL_checklstring(L, idx, &len);
     zmq_msg_t msg;
     int rc = zmq_msg_init_data( &msg, len==0 ? 0 :(void *)data, len, NULL, NULL ); // XXX send 0-length data
     if (rc == -1)
 	return rc;
-    return zmq_msg_send( &msg, skt, flags ); // either error or success
+    return zmq_msg_send( &msg, skt, multip ); // either error or success
 }
 
 // sends ALL or NONE
 static int skt_send_mult_msg(lua_State *L) {
     void *skt = checkskt(L);
     luaL_checktype(L, 2, LUA_TTABLE);
-    int nowait = lua_toboolean(L, 3);
-
-    int flags = ZMQ_SNDMORE | nowait;
-
     int i, N = luaL_len(L, 2);
     for (i=1; i<N; i++) {
 	lua_rawgeti(L, 2, i);
-	if (-1 == send_msg(L, skt, 3, flags)) {
+	if (-1 == send_msg(L, skt, 3, ZMQ_SNDMORE)) {
 	    lua_pushnil(L);
 	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
 	    return 2;
@@ -400,7 +442,7 @@ static int skt_send_mult_msg(lua_State *L) {
 	lua_pop(L, 1);
     }
     lua_rawgeti(L, 2, N);
-    if (-1 == send_msg(L, skt, 3, nowait)) {
+    if (-1 == send_msg(L, skt, 3, 0)) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
 	return 2;
@@ -412,9 +454,8 @@ static int skt_send_mult_msg(lua_State *L) {
 
 static int skt_send_msg(lua_State *L) {
     void *skt = checkskt(L);
-    int nowait = lua_toboolean(L, 3);
-
-    int rc = send_msg(L, skt, 2, nowait);
+    int mult = lua_toboolean(L, 3);
+    int rc = send_msg(L, skt, 2, mult);
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
@@ -437,11 +478,11 @@ static int skt_send_msg(lua_State *L) {
 // MESSAGES
 //
 
-int recv_msg(lua_State *L, void *skt, int nowait) {
+int recv_msg(lua_State *L, void *skt) {
     int rc;
     zmq_msg_t msg;
     rc = zmq_msg_init( &msg ); // always returns ZERO, no errors are defined
-    rc = zmq_msg_recv(&msg, skt, nowait ? ZMQ_DONTWAIT : 0);
+    rc = zmq_msg_recv(&msg, skt, 0); // BLOCK until receive a message from a socket
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: receiving message from a socket failed, %s!", err2str());
@@ -461,20 +502,17 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 }
 
 static int mult_part_msg(lua_State *L) {
-    int nowait = lua_toboolean(L, lua_upvalueindex(1));
     void *skt = checkskt(L);	   // state
     int cnt = lua_tointeger(L, 2); // counter
     if (cnt > 0 && lua_toboolean(L, 3) == 0) // NO more msg's in queue
 	return 0;
     lua_pushinteger(L, ++cnt);	   // increment counter
-    lua_pushboolean(L, recv_msg(L, skt, nowait)); // msg & 'more'
+    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
     return 3;
 }
 
 static int skt_recv_mult_msg(lua_State *L) {
-    int nowait = lua_toboolean(L, 2); // NOWAIT flag
-    lua_pushboolean(L, nowait);
-    lua_pushcclosure(L, &mult_part_msg, 1);	// iter function + upvalue(NOWAIT flag)
+    lua_pushcclosure(L, &mult_part_msg, 0);	// iter function
     lua_pushvalue(L, 1);			// state := socket
     lua_pushinteger(L, 0);			// initialize counter to zero
     return 3;
@@ -482,8 +520,7 @@ static int skt_recv_mult_msg(lua_State *L) {
 
 static int skt_recv_msg(lua_State *L) {
     void *skt = checkskt(L);
-    int nowait = lua_toboolean(L, 2); // NOWAIT flag
-    lua_pushboolean(L, recv_msg(L, skt, nowait)); // msg & 'more'
+    lua_pushboolean(L, recv_msg(L, skt)); // msg & 'more'
     return 2;
 }
 
@@ -541,9 +578,7 @@ static int skt_events(lua_State *L) {
 }
 
 // // // // // // // // // // // // //
-//
 //  add "socket types" as upvalue to method "socket"
-//
 static void socket_fn(lua_State *L) {
     lua_newtable(L); // upvalue
     lua_pushinteger(L, ZMQ_PAIR); lua_setfield(L, -2, "PAIR");
@@ -611,3 +646,265 @@ int luaopen_lzmq (lua_State *L) {
     return 1;
 }
 
+<<<<<<< HEAD
+/*
+
+// POLL
+//
+// Built-in ZMO poll
+//
+// Input/Output multiplexing
+//
+// A mechanism for applications to multiplex input/output events
+// in a level-triggered fashion over a set of sockets. Each member
+// of the array pointed to by the items argument is a zmq_pollitem_t
+// structure.
+// zmq_poll shall examine either the ZMQ socket/standard socket
+// specified, for the event(s) specified in events.
+// If none of the requested events have occurred, zmq_poll shall
+// wait timeout milliseconds for an event to occur on any of the
+// requested items. If the value of timeout is 0, it shall return
+// immediately. If the value of timeout is -1, it shall block
+// indefinitely until a requested event has occurred.
+// The "events and revents" are bit masks constructed by OR'ing a
+// combination of the following event flags:
+// 	ZMQ_POLLIN	at least one message may be received wo blocking
+// 	ZMQ_POLLOUT	at least one message may be sent wo blocking
+// 	ZMQ_POLLERR	some sort of error condition is present
+// 	ZMQ_POLLPRI	of NO use
+//
+// function that in case of success, before timeout, identifies
+// the item which successfully received the event, and returns
+// its index, or nil if timeout.
+
+static int poll_now(lua_State *L) {
+    const long timeout = luaL_checkinteger(L, 1); // milliseconds
+    zmq_pollitem_t *items = (zmq_pollitem_t *)lua_touserdata(L, lua_upvalueindex(1));
+    int i,N = lua_tointeger(L, lua_upvalueindex(2));
+
+    for (i=0; i<N;i++) {
+	if (items[i].revents) {
+printf("ERROR: event has a non-zero value.\n");
+	    items[i].revents = 0;
+	    break;
+	}
+    }
+
+    int rc = zmq_poll(items, N, -1);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+//    lua_pushinteger(L, 0); //in case of timeout
+    for (i=0; i<N;) {
+	zmq_pollitem_t item = items[i++];
+	if (item.revents & ZMQ_POLLIN) {
+	    lua_pushinteger(L, i);
+	    item.revents = 0;
+	    break;
+	}
+    }
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+    zmq_pollitem_t *it, *items = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+    luaL_getmetatable(L, "caap.zmq.pollitem");
+    lua_setmetatable(L, -2);
+
+    it = items;
+    for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = ZMQ_POLLIN;
+	    lua_rawgeti(L, 1, ++i);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	it->socket = skt;
+	    lua_pop(L, 1);
+    }
+
+    for (i=0; i<N;i++) {
+	if (it[i].revents) {
+printf("ERROR: event has a non-zero value.\n");
+	    break;
+	}
+    }
+
+    int rc = zmq_poll(items, N, -1);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    for (i=0; i<N;) {
+	zmq_pollitem_t item = items[i++];
+printf("checking event: %d\n", i);
+	if (item.revents & ZMQ_POLLIN) {
+	    lua_pushinteger(L, i);
+	    break;
+	}
+    }
+
+    return 1;
+}
+
+static int new_poll_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+    zmq_pollitem_t *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+    luaL_getmetatable(L, "caap.zmq.pollitem");
+    lua_setmetatable(L, -2);
+
+    for (i=0; i<N; it++) {
+	it->fd = 0;
+	it->revents = 0;
+	it->events = ZMQ_POLLIN;
+	    lua_rawgeti(L, 1, ++i);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	it->socket = skt;
+	    lua_pop(L, 1);
+    }
+
+    lua_pushinteger(L, N);
+    lua_pushcclosure(L, &poll_now, 2); // upvalue: pollitem, N
+    return 1;
+}
+
+static int poll_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Poll Item}");
+    return 1;
+}
+
+static int poll_gc (lua_State *L) {
+    zmq_pollitem_t *items = (zmq_pollitem_t *)luaL_checkudata(L, 1, "caap.zmq.socket");
+    if (items)
+	items = NULL;
+    return 0;
+}
+
+
+// POLLER
+//
+//
+
+static int new_poller(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+    POLLFD *pfd = (POLLFD *)lua_newuserdata(L, N*sizeof(POLLFD));
+    int fd = -1;
+    size_t len = sizeof(fd);
+
+    for (i=0; i<N; i++) {
+	    lua_rawgeti(L, 1, i+1);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	    zmq_getsockopt(skt, ZMQ_FD, &fd, &len);
+	pfd[i].fd = fd;
+	pfd[i].events = POLLIN;
+	    lua_pop(L, 1);
+    }
+
+    int rc = poll( pfd, N, -1);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	return 2;
+    }
+    rc = 0;
+    for (i=0; i<N; i++) {
+	    lua_rawgeti(L, 1, i+1);
+	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	    zmq_getsockopt(skt, ZMQ_EVENTS, &fd, &len);
+	if (fd & ZMQ_POLLIN) { rc++; }
+	    lua_pop(L, 1);
+    }
+
+    lua_pushinteger(L, rc);
+    return 1;
+}
+ 
+static int skt_send (lua_State *L) {
+    void *skt = checkskt(L);
+    size_t len = 0;
+    const char *msg = luaL_checklstring(L, 2, &len);
+    int rc, multip;
+
+    multip = lua_toboolean(L, 3) ? ZMQ_SNDMORE : 0;
+
+    if (0 == len)
+	rc = zmq_send(skt, 0, 0, 0);
+    else
+	rc = zmq_send(skt, msg, len, multip);
+
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: socket could not send message!");
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int skt_recv (lua_State *L) {
+    void *skt = checkskt(L);
+    int allp = 0;
+
+    char raw [256];
+    size_t raw_size = 256;
+
+   if (lua_toboolean(L, 2)) {
+	allp = 1;
+	lua_newtable(L);
+   }
+
+    do {
+	raw_size = zmq_recv(skt, raw, 256, 0);
+	if (raw_size > 0)
+	    lua_pushlstring(L, raw, raw_size);
+	else
+	    lua_pushnil(L);
+	if (allp)
+	    lua_rawseti(L, -2, allp++);
+    } while (allp && (raw_size == 256));
+
+    return 1;
+}
+
+static int skt_recv_id (lua_State *L) {
+    void *skt = checkskt(L);
+
+    char id [256];
+    size_t id_size = zmq_recv(skt, id, 256, 0);
+    if (id_size < 1) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: socket received an invalid ID!");
+	return 2;
+    }
+
+    lua_pushlstring(L, id, id_size);
+    return 1;
+}
+
+static int skt_send_id (lua_State *L) {
+    void *skt = checkskt(L);
+    size_t id_size;
+    const char *id = luaL_checklstring(L, 2, &id_size);
+
+    int rc = zmq_send(skt, id, id_size, ZMQ_SNDMORE);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: socket ID could not be sent due to %s!", err2str());
+	return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+*/
+=======
+>>>>>>> 7a168d0bdb578ed5a799541b3fc86056b4154359
