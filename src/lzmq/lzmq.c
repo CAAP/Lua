@@ -134,6 +134,7 @@ static int new_context(lua_State *L) {
 
 static int skt_subscribe(lua_State *L);
 static int skt_unsubscribe(lua_State *L);
+static int skt_stream_notify(lua_State *L);
 
 static int new_socket(lua_State *L) {
     void *ctx = checkctx(L);
@@ -160,6 +161,13 @@ static int new_socket(lua_State *L) {
 	lua_setfield(L, -2, "subscribe");
 	lua_pushcclosure(L, &skt_unsubscribe, 0);
 	lua_setfield(L, -2, "unsubscribe");
+	lua_pop(L, 1); // pop metatable
+    }
+
+    if(type == ZMQ_STREAM) {
+	luaL_getmetatable(L, "caap.zmq.socket");
+	lua_pushcclosure(L, &skt_stream_notify, 0);
+	lua_setfield(L, -2, "notify");
 	lua_pop(L, 1); // pop metatable
     }
 
@@ -503,6 +511,30 @@ static int skt_set_id(lua_State *L) {
     return 1;
 }
 
+static int skt_set_rid(lua_State *L) {
+    void *skt = checkskt(L);
+
+    char identity[10];
+    size_t len;
+    int rc;
+
+    if(lua_gettop(L) == 2) {
+	const char* idd = luaL_checklstring(L, 2, &len);
+	rc = zmq_setsockopt(skt, ZMQ_CONNECT_RID, idd, len);
+    } else {
+	sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
+	len = strlen(identity);
+	rc = zmq_setsockopt(skt, ZMQ_CONNECT_RID, identity, len);
+    }
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static int skt_subscribe(lua_State *L) {
     void *skt = checkskt(L);
     const char* filter = luaL_checkstring(L, 2);
@@ -529,15 +561,38 @@ static int skt_unsubscribe(lua_State *L) {
     return 1;
 }
 
+static int skt_stream_notify(lua_State *L) {
+    void *skt = checkskt(L);
+    int notify = luaL_checkinteger(L, 2);
+    size_t len = sizeof(notify);
+
+    int rc = zmq_setsockopt(skt, ZMQ_STREAM_NOTIFY, &notify, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting stream notifications for socket, %s!", err2str());
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static int skt_events(lua_State *L) {
     void *skt = checkskt(L);
     int flag = ZMQ_POLLIN;
     size_t len = sizeof(flag);
-    if (zmq_getsockopt(skt, ZMQ_EVENTS, &flag, &len) == 0)
-	lua_pushstring(L, flag & ZMQ_POLLIN ? "POLLIN" : "POLLOUT");
-    else
+    if (zmq_getsockopt(skt, ZMQ_EVENTS, &flag, &len) == 0) { // success!!!
+	if (flag & ZMQ_POLLIN)
+	    lua_pushstring(L, "POLLIN");
+	else if (flag & ZMQ_POLLOUT)
+	    lua_pushstring(L, "POLLOUT");
+	else
+	    lua_pushboolean(L, 0);
+	return 1;
+    } else {
 	lua_pushnil(L);
-    return 1;
+    	lua_pushfstring(L, "ERROR: getting sockopt EVENTS for socket, %s!", err2str());
+	return 2;
+    }
 }
 
 // // // // // // // // // // // // //
@@ -587,6 +642,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"recv_msg",   skt_recv_msg},
     {"recv_msgs",  skt_recv_mult_msg},
     {"set_id",	   skt_set_id},
+    {"set_rid",	   skt_set_rid},
     {"events",	   skt_events},
     {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},
