@@ -6,7 +6,6 @@ local file_exists  = require'carlos.bsd'.file_exists
 local format 	   = require'string'.format
 local connect	   = require'carlos.sqlite'.connect
 local sleep	   = require'lbsd'.sleep
-local socket	   = require'socket'
 
 local assert	   = assert
 
@@ -20,26 +19,6 @@ _ENV = nil -- or M
 -- Local function definitions --
 --------------------------------
 --
-
-local function server(port)
-    local srv = assert( socket.bind('*', port) )
-    local skt = srv:getsockname()
-    srv:settimeout(0)
-    return srv, skt
---    print(skt, 'listening on port', port, '\n')
-end
-
-local function handshake(srv)
-    local c = srv:accept()
-    if c then
-	c:settimeout(1)
-	local ip = c:getpeername():match'%g+' --XXX ip should be used
---	print(ip, 'connected on port 8080 to', skt)
---	local response = hd.response({content='stream', body='retry: 60'}).asstr()
-	if c:send( response ) and initFeed(c) then cts[#cts+1] = c
-	else c:close() end
-	end
-end
 
 --------------------------------
 -- Public function definitions --
