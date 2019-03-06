@@ -5,8 +5,13 @@ local file_exists  = require'carlos.bsd'.file_exists
 
 local format 	   = require'string'.format
 local connect	   = require'carlos.sqlite'.connect
+local reduce	   = require'carlos.fold'.reduce
+local keys	   = require'carlos.fold'.keys
 local sleep	   = require'lbsd'.sleep
+local env	   = os.getenv
 
+local char	   = string.char
+local tonumber	   = tonumber
 local assert	   = assert
 
 -- No more external access after this point
@@ -19,17 +24,25 @@ _ENV = nil -- or M
 -- Local function definitions --
 --------------------------------
 --
+local function tofruit( fruit, m ) return format('%s %s', fruit, m) end
+
+local function hex(h) return char(tonumber(h, 16)) end
+
+local function aspath(s) return format('%s/db/%s.db', env'HOME', s) end
 
 --------------------------------
 -- Public function definitions --
 --------------------------------
 --
--- accepts name of db and adds absolute path,
+-- accepts name of db (adds absolute path),
 -- creating it if required, otherwise it checks
 -- whether path already exists, always returning
 -- the sql connection or error
+
+M.aspath = aspath
+
 function M.dbconn(path, create)
-    local f = format(path)
+    local f = aspath(path)
     if create or file_exists(f) then
 	return connect(f)
     else
@@ -48,6 +61,8 @@ function M.decode(msg)
     return cmd, data
 end
 
+function M.urldecode(s) return s:gsub('+', '|'):gsub('%%(%x%x)', hex) end
+
 -- Maybe should be in "ferre-server" where it is needed!!!XXX
 function M.chunks(f)
     local k = 1
@@ -56,6 +71,20 @@ function M.chunks(f)
 	if k%100 == 0 then sleep(1) end
 	k = k + 1
     end
+end
+
+-- XXX function 'send_msg' can optionally return IMMEDIATELY
+function M.cache(ps)
+    local MM = {}
+    local CACHE = {karl=ps}
+
+    function MM.store(pid, msg) CACHE[pid] = msg end
+
+    function MM.delete( pid ) CACHE[pid] = nil end
+
+    function MM.sndkch(msgr, fruit) reduce(keys(CACHE), function(m) msgr:send_msg(tofruit(fruit, m)) end) end
+
+    return MM
 end
 
 return M

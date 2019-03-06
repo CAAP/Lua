@@ -1,0 +1,7 @@
+/home/sg/Lua/src/ltry/build.luarocks/CMakeFiles/install/local.dir
+/home/sg/Lua/src/ltry/build.luarocks/CMakeFiles/install/strip.dir
+/home/sg/Lua/src/ltry/build.luarocks/CMakeFiles/install.dir
+/home/sg/Lua/src/ltry/build.luarocks/CMakeFiles/list_install_components.dir
+/home/sg/Lua/src/ltry/build.luarocks/CMakeFiles/rebuild_cache.dir
+/home/sg/Lua/src/ltry/build.luarocks/CMakeFiles/edit_cache.dir
+/home/sg/Lua/src/ltry/build.luarocks/CMakeFiles/ltry.dir

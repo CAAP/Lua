@@ -65,7 +65,7 @@ local function connect( dbname )
 
     local function rows( query ) return function() return conn:rows( query ), conn, 0 end end
 
-    MM.exists = exists
+    MM.exists = exists -- XXX returns prepared statement ???
 
     MM.query = rows
 

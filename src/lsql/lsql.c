@@ -147,6 +147,7 @@ static int version (lua_State *L) {
 
 static int connect (lua_State *L) {
     const char* dbname = luaL_checkstring(L, 1);
+    int readonly = lua_toboolean(L, 2);
 
     /* create userdatum to store a sqlite3 connection object. */
     sqlite3 **ppDB = (sqlite3 **)lua_newuserdata(L, sizeof(sqlite3 *));
@@ -157,8 +158,12 @@ static int connect (lua_State *L) {
 
     /* try to open the given database */
     // sqlite3_open_v2(dbname, ppDB, SQLITE_OPEN_READONLY, 0);
-    // sqlite3_open(dbname, ppDB);
-    int error = sqlite3_open_v2(dbname, ppDB, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE, 0);
+    int error;
+    if (readonly)
+	error = sqlite3_open_v2(dbname, ppDB, SQLITE_OPEN_READONLY, 0);
+    else
+	error = sqlite3_open_v2(dbname, ppDB, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE, 0);
+
     if (*ppDB == NULL || error ) {
 	    lua_pushnil(L);
 	    lua_pushfstring(L, "Error opening database \"%s\": %s\n", dbname, sqlite3_errmsg(*ppDB) );
