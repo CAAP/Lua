@@ -4,6 +4,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include <zmq.h>
 
@@ -29,11 +30,6 @@ char *err2str() {
     }
 }
 
-//int event2int(const char *ev) { return (strncmp(ev, "pollin", 6) == 0 ? ZMQ_POLLIN : ZMQ_POLLOUT); }
-
-// Thread-safe SOCKETS:
-// ZMQ_CLIENT, ZMQ_SERVER, ZMQ_DISH, ZMQ_RADIO, ZMQ_SCATTER, ZMQ_GATHER
-//
 // ZeroMQ patterns encapsulate hard-earned experience of the best ways to
 // distribute data and work. ZeroMQ patterns are implemented by pairs of
 // sockets with matching types. The built-in core ZeroMQ patterns are:
@@ -444,6 +440,8 @@ static int skt_send_msg(lua_State *L) {
 //
 // MESSAGES
 //
+// A routing ID is set on all messages received by a ZMQ_SERVER socket.
+// To send a message, your must set the routing ID of a connected peer.
 
 int recv_msg(lua_State *L, void *skt, int nowait) {
     int rc;

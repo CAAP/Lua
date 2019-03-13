@@ -7,6 +7,7 @@ local format 	   = require'string'.format
 local connect	   = require'carlos.sqlite'.connect
 local reduce	   = require'carlos.fold'.reduce
 local keys	   = require'carlos.fold'.keys
+local into	   = require'carlos.fold'.into
 local sleep	   = require'lbsd'.sleep
 local env	   = os.getenv
 
@@ -63,6 +64,13 @@ end
 
 function M.urldecode(s) return s:gsub('+', '|'):gsub('%%(%x%x)', hex) end
 
+function M.receive(srv)
+    local function msgs() return srv:recv_msgs() end -- returns iter, state & counter
+    local id, more = srv:recv_msg()
+    if id and more then more = reduce(msgs, into, {}) end
+    return id, more
+end
+
 -- Maybe should be in "ferre-server" where it is needed!!!XXX
 function M.chunks(f)
     local k = 1
@@ -73,7 +81,7 @@ function M.chunks(f)
     end
 end
 
--- XXX function 'send_msg' can optionally return IMMEDIATELY
+-- XXX function 'send_msg' can optionally return IMMEDIATELY - NOWAIT flag
 function M.cache(ps)
     local MM = {}
     local CACHE = {karl=ps}
