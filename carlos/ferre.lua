@@ -13,6 +13,7 @@ local env	   = os.getenv
 
 local char	   = string.char
 local tonumber	   = tonumber
+local tointeger    = math.tointeger
 local assert	   = assert
 
 -- No more external access after this point
@@ -30,6 +31,8 @@ local function tofruit( fruit, m ) return format('%s %s', fruit, m) end
 local function hex(h) return char(tonumber(h, 16)) end
 
 local function aspath(s) return format('%s/db/%s.db', env'HOME', s) end
+
+local function asnum(s) return (tointeger(s) or tonumber(s) or s) end
 
 --------------------------------
 -- Public function definitions --
@@ -58,7 +61,7 @@ function M.ssevent( event, data ) return format('event: %s\ndata: %s\n\n', event
 function M.decode(msg)
     local cmd = msg:match'%a+'
     local data = {}
-    for k,v in msg:gmatch'(%a+)=([^=&]+)' do data[k] = v end
+    for k,v in msg:gmatch'(%a+)=([^=&]+)' do data[k] = asnum(v) end
     return cmd, data
 end
 
