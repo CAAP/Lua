@@ -14,6 +14,7 @@ local env	   = os.getenv
 local char	   = string.char
 local tonumber	   = tonumber
 local tointeger    = math.tointeger
+local time	   = os.time
 local assert	   = assert
 
 -- No more external access after this point
@@ -45,6 +46,8 @@ local function asnum(s) return (tointeger(s) or tonumber(s) or s) end
 
 M.aspath = aspath
 
+function M.now() return time()-21600 end
+
 function M.dbconn(path, create)
     local f = aspath(path)
     if create or file_exists(f) then
@@ -56,7 +59,10 @@ end
 
 function M.connexec( conn, s ) return assert( conn.exec(s) ) end
 
-function M.ssevent( event, data ) return format('event: %s\ndata: %s\n\n', event, data) end
+function M.ssevent( event, data )
+    if event == 'SSE' then return data
+    else return format('event: %s\ndata: %s\n\n', event, data) end
+end
 
 function M.decode(msg)
     local cmd = msg:match'%a+'
