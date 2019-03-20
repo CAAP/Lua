@@ -15,6 +15,7 @@ local char	   = string.char
 local tonumber	   = tonumber
 local tointeger    = math.tointeger
 local time	   = os.time
+local date	   = os.date
 local assert	   = assert
 
 -- No more external access after this point
@@ -35,6 +36,8 @@ local function aspath(s) return format('%s/db/%s.db', env'HOME', s) end
 
 local function asnum(s) return (tointeger(s) or tonumber(s) or s) end
 
+local function now() return time()-21600 end
+
 --------------------------------
 -- Public function definitions --
 --------------------------------
@@ -46,7 +49,9 @@ local function asnum(s) return (tointeger(s) or tonumber(s) or s) end
 
 M.aspath = aspath
 
-function M.now() return time()-21600 end
+M.now	 = now
+
+function M.getUID() return date('%FT%TP', now()) end
 
 function M.dbconn(path, create)
     local f = aspath(path)
