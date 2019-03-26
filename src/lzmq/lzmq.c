@@ -497,15 +497,23 @@ static int skt_recv_msg(lua_State *L) {
 static int skt_set_id(lua_State *L) {
     void *skt = checkskt(L);
     char identity[10];
-    sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
-    size_t len = strlen(identity);
-    int rc = zmq_setsockopt(skt, ZMQ_IDENTITY, identity, len);
+    size_t len;
+    int rc;
+
+    if(lua_gettop(L) == 2) {
+	const char* idd = luaL_checklstring(L, 2, &len);
+	rc = zmq_setsockopt(skt, ZMQ_IDENTITY, idd, len);
+    } else {
+	sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
+	len = strlen(identity);
+	rc = zmq_setsockopt(skt, ZMQ_IDENTITY, identity, len);
+    }
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", err2str());
 	return 2;
     }
-    lua_pushlstring(L, identity, len);
+    lua_pushboolean(L, 1);
     return 1;
 }
 
