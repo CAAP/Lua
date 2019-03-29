@@ -36,7 +36,7 @@ local function aspath(s) return format('%s/db/%s.db', env'HOME', s) end
 
 local function asnum(s) return (tointeger(s) or tonumber(s) or s) end
 
-local function now() return time()-21600 end
+local function now() return time() end -- -21600  3.mx.pool.ntp.org
 
 --------------------------------
 -- Public function definitions --
