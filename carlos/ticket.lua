@@ -51,7 +51,7 @@ function M.ticket(w)
 
     local function procesar(w)
 	ret[#ret+1] = w.desc
-	ret[#ret+1] = campos{w.clave, w.qty, w.rea, w.prc, w.subTotal}
+	ret[#ret+1] = campos{w.clave, w.qty, w.rea, w.unitario, w.subTotal} -- w.prc
 	if (w.uidSAT) then
 	    local uid = int(w.uidSAT) or 0
 	    uid = uid>0 and uid or 'XXXXX'
@@ -71,12 +71,12 @@ function M.ticket(w)
 	    ret[#ret+1] = derecha(format('TOTAL    %s', w.ttotal))
 	    return
         end
-	if #w.total > width then local m = letra(w.total); ret[#ret+1] = m:sub(1, width); ret[#ret+1] = m:sub(width+1)
-	else ret[#ret+1] = letra(w.total) end
+--	if #w.total > width then local m = letra(w.total); ret[#ret+1] = m:sub(1, width); ret[#ret+1] = m:sub(width+1)
+--	else ret[#ret+1] = letra(w.total) end
     end
 
     if w.datos then fd.reduce(w.datos, procesar); finish(w) end
-    ret[#ret+1] = format('\n%s', w.person:upper() or '')
+    ret[#ret+1] = format('\n%s', w.person and w.person:upper() or '')
     ret[#ret+1] = centrado'GRACIAS POR SU COMPRA'
     ret[#ret+1] = '\27\100\7 \27\105'
     return concat(ret, '\n')

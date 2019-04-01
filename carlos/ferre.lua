@@ -51,7 +51,9 @@ M.aspath = aspath
 
 M.now	 = now
 
-function M.getUID() return date('%FT%TP', now()) end
+M.asnum  = asnum
+
+function M.newUID() return date('%FT%TP', now()) end
 
 function M.dbconn(path, create)
     local f = aspath(path)
@@ -67,6 +69,11 @@ function M.connexec( conn, s ) return assert( conn.exec(s) ) end
 function M.ssevent( event, data )
     if event == 'SSE' then return data
     else return format('event: %s\ndata: %s\n\n', event, data) end
+end
+
+function M.asweek( uid )
+    local Y, M, D = uid:match'(%d+)%-(%d+)%-(%d+)T'
+    return date('Y%YW%U', time{year=Y, month=M, day=D})
 end
 
 function M.decode(msg)
