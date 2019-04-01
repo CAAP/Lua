@@ -38,6 +38,8 @@ local function asnum(s) return (tointeger(s) or tonumber(s) or s) end
 
 local function now() return time() end -- -21600  3.mx.pool.ntp.org
 
+local function asweek(t) return date('Y%YW%U', t) end
+
 --------------------------------
 -- Public function definitions --
 --------------------------------
@@ -52,6 +54,8 @@ M.aspath = aspath
 M.now	 = now
 
 M.asnum  = asnum
+
+M.asweek = asweek
 
 function M.newUID() return date('%FT%TP', now()) end
 
@@ -71,9 +75,9 @@ function M.ssevent( event, data )
     else return format('event: %s\ndata: %s\n\n', event, data) end
 end
 
-function M.asweek( uid )
+function M.uid2week( uid )
     local Y, M, D = uid:match'(%d+)%-(%d+)%-(%d+)T'
-    return date('Y%YW%U', time{year=Y, month=M, day=D})
+    return asweek(time{year=Y, month=M, day=D})
 end
 
 function M.decode(msg)

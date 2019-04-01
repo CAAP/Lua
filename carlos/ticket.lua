@@ -12,6 +12,8 @@ local floor = math.floor
 local int = math.tointeger
 local popen = io.popen
 
+local print = print
+
 -- No more external access after this point
 _ENV = nil -- or M
 
@@ -37,7 +39,7 @@ end
 ---------------------------------
 -- Public function definitions --
 ---------------------------------
-function M.ticket(w)
+function M.ticket(head, data)
     local ret = {'\27\60', '',
 	centrado'FERRETERIA AGUILAR',
 	centrado'FERRETERIA Y REFACCIONES EN GENERAL',
@@ -51,7 +53,7 @@ function M.ticket(w)
 
     local function procesar(w)
 	ret[#ret+1] = w.desc
-	ret[#ret+1] = campos{w.clave, w.qty, w.rea, w.unitario, w.subTotal} -- w.prc
+	ret[#ret+1] = campos{w.clave, w.qty, w.rea, w.unitario, w.subTotal}
 	if (w.uidSAT) then
 	    local uid = int(w.uidSAT) or 0
 	    uid = uid>0 and uid or 'XXXXX'
@@ -73,14 +75,16 @@ function M.ticket(w)
         end
 --	if #w.total > width then local m = letra(w.total); ret[#ret+1] = m:sub(1, width); ret[#ret+1] = m:sub(width+1)
 --	else ret[#ret+1] = letra(w.total) end
+	ret[#ret+1] = format('\n%s', w.nombre and w.nombre:upper() or '')
     end
 
-    if w.datos then fd.reduce(w.datos, procesar); finish(w) end
-    ret[#ret+1] = format('\n%s', w.person and w.person:upper() or '')
+    if #data > 0 then fd.reduce(data, function(w) procesar(w) end); finish(head) end
+
     ret[#ret+1] = centrado'GRACIAS POR SU COMPRA'
     ret[#ret+1] = '\27\100\7 \27\105'
     return concat(ret, '\n')
 end
+
 
 function M.bixolon(endpoint, s)
     local p = popen("nc ".. endpoint,'w')
@@ -90,3 +94,4 @@ function M.bixolon(endpoint, s)
 end
 
 return M
+
