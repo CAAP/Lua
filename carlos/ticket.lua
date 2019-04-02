@@ -67,14 +67,17 @@ function M.ticket(head, data)
 	ret[7] = centrado(format('Fecha: %s | Hora: %s', fecha, hora))
 	ret[#ret+1] = ''
 	ret[#ret+1] = derecha(w.total)
+
 	if w.iva then
 	    remove(ret, 3); remove(ret, 3); remove(ret, 3); remove(ret, 3); remove(ret, 3)
 	    ret[#ret+1] = derecha(format('I.V.A.   %s', w.iva))
 	    ret[#ret+1] = derecha(format('TOTAL    %s', w.ttotal))
 	    return
         end
---	if #w.total > width then local m = letra(w.total); ret[#ret+1] = m:sub(1, width); ret[#ret+1] = m:sub(width+1)
---	else ret[#ret+1] = letra(w.total) end
+
+	local m = letra(w.total)
+	if #m > width then ret[#ret+1] = m:sub(1, width); ret[#ret+1] = m:sub(width+1)
+	else ret[#ret+1] = m end
 	ret[#ret+1] = format('\n%s', w.nombre and w.nombre:upper() or '')
     end
 

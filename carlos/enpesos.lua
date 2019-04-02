@@ -27,7 +27,7 @@ local suffix = {}
 --------------------------------
 local function enpesos(z)
     if type(z) == "number" then z = tostring(z) end
-    local y,c = z:match'(%d+)%.(%d%d)'
+    local y,c = z:match'(%d+)%.(%d+)'
     local N = #y
     local ret = {}
 
