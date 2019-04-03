@@ -33,6 +33,8 @@ local function enpesos(z)
 
     suffix[4] = 'MIL'; suffix[7] = 'MILLON'
 
+    if #c == 1 then c = c..'0' end
+
     local function digit(i) return int(y:sub(i,i)) end
 
     if N == 1 and y == '1' then return format('UN PESO %s/100 M.N.', c) end
