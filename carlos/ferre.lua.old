@@ -9,7 +9,6 @@ local reduce	   = require'carlos.fold'.reduce
 local keys	   = require'carlos.fold'.keys
 local into	   = require'carlos.fold'.into
 local asJSON	   = require'carlos.json'.asJSON
-local dump	   = require'carlos.files'.dump
 local sleep	   = require'lbsd'.sleep
 local env	   = os.getenv
 
@@ -28,12 +27,13 @@ _ENV = nil -- or M
 
 -- Local Variables for module-only access
 --
-local HOME	   = '/var/www/htdocs/app-ferre'
-local ROOT	   = HOME .. '/ventas/json'
-local DEST	   = ROOT .. '/version.json'
-
-local SEMANA	   = 3600 * 24 * 7
 local QUERY	   = 'SELECT * FROM updates %s'
+local ROOT	   = '/var/www/htdocs/app-ferre/ventas/json'
+local DEST	   = ROOT .. '/version.json'
+local DEST_PRC	   = ROOT .. '/precios.json'
+local DEST_PPL 	   = ROOT .. '/people.json'
+
+local HOME	   = env'HOME'
 
 --------------------------------
 -- Local function definitions --
@@ -43,7 +43,7 @@ local function tofruit( fruit, m ) return format('%s %s', fruit, m) end
 
 local function hex(h) return char(tonumber(h, 16)) end
 
-local function aspath(s) return format('%s/db/%s.db', env'HOME' , s) end
+local function aspath(s) return format('%s/db/%s.db', HOME, s) end
 
 local function asnum(s) return (tointeger(s) or tonumber(s) or s) end
 
@@ -60,21 +60,45 @@ local function dbconn(path, create)
     end
 end
 
+-- remove 'vers' since it's an extra event in itself and add arg 'store'
+local function prepare(w)
+    w.vers = nil
+    w.store = 'PRICE'
+    return w
+end
+
+local function nulls(w)
+    if w.precio2 == 0 then w.precio2 = nil end
+    if w.precio3 == 0 then w.precio3 = nil end
+    return w
+end
+
 --
 -- Functions to compute the current/ongoing version
 -- based on the latest WEEK file on existence
 --
-local function asweek(t) return date('Y%YW%U', t) end
 
-local function backintime(week, t) while week < asweek(t) do t = t - 3600*24*7 end; return t end
-
--- if db file exists and 'updates' tb exists then returns count
+-- if 'db' file exists and 'updates' tb exists then returns count
 local function which( db )
-    local conn = assert( dbconn( db ) )
+    local conn = dbconn( db )
     if conn and conn.exists'updates' then
 	return conn.count'updates'
     else return 0 end
 end
+
+local function fromWeek(week, vers)
+    local conn	 = dbconn(week)
+    local clause = vers > 0 and format('WHERE vers > %d', vers) or ''
+    local N	 = conn.count('updates', clause)
+
+    if N > 0 then
+	local data = fd.reduce(conn.query(format(QUERY, clause)), fd.map(prepare), fd.map(asJSON), fd.into, {})
+	data[#data+1] = asJSON{vers=conn.count'updates', week=week, store='VERS'}
+	return concat(data, ',\n')
+    end
+end
+
+local function backintime(week, t) while week < asweek(t) do t = t - 3600*24*7 end; return t end
 
 local function version()
     local hoy = now()
@@ -86,29 +110,7 @@ local function version()
 	vers = which( week )
 --	if week:match'W00' then break end
     end
-    return asJSON{week=week, vers=vers}
-end
-
--- Functions to 
---
--- remove 'vers' since it's an extra event in itself and add arg 'store'
-local function prepare(w)
-    w.vers = nil
-    w.store = 'PRICE'
-    return w
-end
-
-local function fromWeek(week, vers)
-    local conn =  dbconn(week)
-    local vers = asnum(vers)
-    local clause = vers > 0 and format('WHERE vers > %d', vers) or ''
-    local N = conn.count('updates', clause)
-
-    if N > 0 then
-	local data = fd.reduce(conn.query(format(QUERY, clause)), fd.map(prepare), fd.map(asJSON), fd.into, {})
-	data[#data+1] = asJSON{vers=conn.count('updates'), week=week, store='VERS'}
-	return concat(data, ',\n')
-    end
+    return {week=week, vers=vers}
 end
 
 -- ITERATIVE procedure AWESOME
@@ -132,8 +134,6 @@ end
 -- whether path already exists, always returning
 -- the sql connection or error
 
-M.HOME	 = HOME
-
 M.aspath = aspath
 
 M.now	 = now
@@ -143,10 +143,6 @@ M.asnum  = asnum
 M.asweek = asweek
 
 M.dbconn = dbconn
-
-M.stream = stream
-
-M.version = version
 
 function M.newUID() return date('%FT%TP', now()) end
 
@@ -183,12 +179,51 @@ end
 
 --local function dumpVERS(v) dump(DEST, v) end
 
-function M.dumpVERS(v) dump(DEST, v) end
+function M.dumpPRICE()
+    local conn =  dbconn'ferre'
+    local QRY = 'SELECT * FROM precios WHERE desc NOT LIKE "VV%"'
+    local FIN = open(DEST_PRC, 'w')
+
+    FIN:write'['
+    FIN:write( concat(fd.reduce(conn.query(QRY), fd.map(nulls), fd.map(asJSON), fd.into, {}), ', ') )
+    FIN:write']'
+    FIN:close()
+end
+
+function M.getVersion()
+    local VERS = version()
+    local v = asJSON(VERS)
+--    dumpVERS( v )
+    dumpPRICE(DEST_PRC)
+--    print('\n\tWeek:', VERS.week, '\n\tVers:', VERS.vers, '\n')
+    return v
+end
+
+function M.dumpPEOPLE()
+    local conn = dbconn'ferre'
+    local QRY = 'SELECT id, nombre FROM empleados'
+    local FIN = open(DEST_PPL, 'w')
+
+    FIN:write'['
+    FIN:write( concat(fd.reduce(conn.query(QRY), fd.map(asJSON), fd.into, {}), ', ') )
+    FIN:write']'
+    FIN:close()
+end
 
 function M.dumpFEED(conn, PATH, qry)
     local FIN = open(PATH, 'w')
     FIN:write'['
     FIN:write( concat(fd.reduce(conn.query(qry), fd.map(getName), fd.map(asJSON), fd.into, {}), ',\n') )
+    FIN:write']'
+    FIN:close()
+    return 'Updates stored and dumped'
+end
+
+-- find all updates that need to be sent to a specific peer & send them all
+function M.adjust(fruit, week, vers)
+    local FIN = open(format('%s/%s.json', ROOT, fruit), 'w')
+    FIN:write'['
+    FIN:write( concat(fd.reduce(stream(week, vers), fd.into, {}), ',\n') )
     FIN:write']'
     FIN:close()
     return 'Updates stored and dumped'
