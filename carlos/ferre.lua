@@ -68,6 +68,7 @@ local function asweek(t) return date('Y%YW%U', t) end
 
 local function backintime(week, t) while week < asweek(t) do t = t - 3600*24*7 end; return t end
 
+--[[
 -- if db file exists and 'updates' tb exists then returns count
 local function which( db )
     local conn = assert( dbconn( db ) )
@@ -88,14 +89,21 @@ local function version()
     end
     return asJSON{week=week, vers=vers}
 end
+--]]
 
 -- Functions to 
 --
 -- remove 'vers' since it's an extra event in itself and add arg 'store'
-local function prepare(w)
-    w.vers = nil
-    w.store = 'PRICE'
-    return w
+--    w.vers = nil
+local function prepare(w) w.store = 'PRICE'; return w; end
+
+local function groupMe( a )
+    return function(x)
+	local k = x.clave
+	if not a[k] then a[k] = {clave=k} end
+	local v = a[k]
+	v[x.campo] = x.valor
+    end
 end
 
 local function fromWeek(week, vers)
@@ -105,7 +113,9 @@ local function fromWeek(week, vers)
     local N = conn.count('updates', clause)
 
     if N > 0 then
-	local data = fd.reduce(conn.query(format(QUERY, clause)), fd.map(prepare), fd.map(asJSON), fd.into, {})
+	local data = fd.reduce(conn.query(format(QUERY, clause)), groupMe, {})
+	data = fd.reduce(fd.keys(data), fd.map(prepare), fd.map(asJSON), fd.into, {})
+
 	data[#data+1] = asJSON{vers=conn.count('updates'), week=week, store='VERS'}
 	return concat(data, ',\n')
     end
@@ -134,6 +144,8 @@ end
 
 M.HOME	 = HOME
 
+M.APP	 = env'HOME' .. '/app-ferre'
+
 M.aspath = aspath
 
 M.now	 = now
@@ -146,7 +158,7 @@ M.dbconn = dbconn
 
 M.stream = stream
 
-M.version = version
+--M.version = version
 
 function M.newUID() return date('%FT%TP', now()) end
 
