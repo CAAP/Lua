@@ -2,6 +2,8 @@
 
 lua=/usr/local/bin/lua53
 
+### actual/
+
 for f in $(ls $HOME/app-ferre/ferre-*.lua) ;do
     echo 'Initializing' $f '\n'
     $lua $f &
