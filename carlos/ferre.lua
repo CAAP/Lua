@@ -68,29 +68,6 @@ local function asweek(t) return date('Y%YW%U', t) end
 
 local function backintime(week, t) while week < asweek(t) do t = t - 3600*24*7 end; return t end
 
---[[
--- if db file exists and 'updates' tb exists then returns count
-local function which( db )
-    local conn = assert( dbconn( db ) )
-    if conn and conn.exists'updates' then
-	return conn.count'updates'
-    else return 0 end
-end
-
-local function version()
-    local hoy = now()
-    local week = asweek( hoy )
-    local vers = which( week )
-    while vers == 0 do -- change in YEAR XXX
-	hoy = hoy - SEMANA
-	week = asweek( hoy )
-	vers = which( week )
---	if week:match'W00' then break end
-    end
-    return asJSON{week=week, vers=vers}
-end
---]]
-
 -- Functions to 
 --
 -- remove 'vers' since it's an extra event in itself and add arg 'store'
@@ -233,3 +210,29 @@ function M.cache(ps)
 end
 
 return M
+
+
+--[[
+-- if db file exists and 'updates' tb exists then returns count
+local function which( db )
+    local conn = assert( dbconn( db ) )
+    if conn and conn.exists'updates' then
+	return conn.count'updates'
+    else return 0 end
+end
+
+local function version()
+    local hoy = now()
+    local week = asweek( hoy )
+    local vers = which( week )
+    while vers == 0 do -- change in YEAR XXX
+	hoy = hoy - SEMANA
+	week = asweek( hoy )
+	vers = which( week )
+--	if week:match'W00' then break end
+    end
+    return asJSON{week=week, vers=vers}
+end
+--]]
+
+
