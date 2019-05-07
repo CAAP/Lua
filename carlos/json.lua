@@ -27,7 +27,7 @@ local function asJSON( w )
     local ret = {}
     for k,v in pairs(w) do
 	local u = type(v) == 'table' and asJSON(v) or (asint(v) or v)
-	ret[#ret+1] = format('%q: %'..(tonumber(u) and 's' or 'q'), k, u)
+	ret[#ret+1] = format('%q: %'..((tonumber(u) or u:match'"' or u:match'{') and 's' or 'q'), k, u)
     end
     return format('{%s}', concat(ret, ', ')):gsub('"%[', '['):gsub(']"', ']'):gsub("'", '"')
 end
