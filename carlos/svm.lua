@@ -2,33 +2,64 @@
 local M = {}
 
 -- Import Section
-lsvm=require'lsvm'
-local svmprob=lsvm.problem
-local params=lsvm.params
-local train=lsvm.train
+local fd = require'carlos.fold'
 
-tb=require'carlos.tables'
-local reduce=tb.reduce
-local shuffle=tb.shuffle
+local nodes = require'lsvm'.nodes
 
-local remove=table.remove
-local ipairs=ipairs
-local assert=assert
-local abs=math.abs
-local max=math.max
-local huge=math.huge
-local pow=math.pow
-local unpack=table.unpack
-local sort=table.sort
-local randomseed=math.randomseed
 
---local print=print
 -- Local Variables for module-only access
 
 -- No more external access after this point
 _ENV = nil -- or M
 
 -- Function definitions
+
+--[[
+ *  EXAMPLE
+ *
+ *  LABEL  ATTR1 ATTR2 ATTR3 ATTR4 ATTR5
+ *    1      0    0.1   0.2    0     0
+ *    2      0    0.1   0.3  -1.2    0
+ *    1     0.4    0     0     0     0
+ *    2      0    0.1    0    1.4   0.5
+ *    3    -0.1  -0.2   0.1   1.1   0.1
+ *
+ *  *** SPARSE - LUA ***
+ *    1      2, 0.1   3, 0.2
+ *    2      2, 0.1   3, 0.3   4, -1.2
+ *    1      1, 0.4
+ *    2      2, 0.1   4, 1.4   5, 0.5
+ *    3      1, -0.1  2, -0.2  3, 0.1   4, 1.1   5, 0.1
+ *
+ *  DATA - C
+ *    [1, {2,0.1, 3,0.2, -1,0.0}], [2, {2,0.1, 3,0.3, 4,-1.2, -1,0.0}], ...
+ *    [1, {1,0.4, -1,0.0}], [2 {2,0.1, 4,1.4, 5,0.5, -1,0.0}], ...
+ *    [3, {1,-0.1, 2,-0.2, 3,0.1, 4,1.1, 5,0.1, -1,0.0}]
+--]]
+
+local function distill(data)
+    local M = #data
+    local N = fd.reduce(data, fd.map(function(x) return #x end), fd.sum, {sum=0}).sum
+
+    local ys = fd.reduce(data, fd.map(function(x) return x[1] end), fd.into, {})
+    local nodes = nodes(data, N)
+
+    local MM = {}
+
+    function MM.get(m)
+	assert(m < N, 'Index must be less than number of nodes')
+	return nodes:get(m)
+    end
+
+    function MM.__len() return M, N end
+
+
+
+    return MM
+end
+
+
+
 
 local function svmfeats(atable, classIdx, negClass, start, stop)
   local ret = {}
@@ -50,6 +81,10 @@ local function svmfeats(atable, classIdx, negClass, start, stop)
 
   return ret
 end
+
+
+
+
 
 M.svmfeats = svmfeats
 

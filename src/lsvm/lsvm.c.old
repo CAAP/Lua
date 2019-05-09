@@ -1,0 +1,206 @@
+#include <lua.h>
+#include <lauxlib.h>
+
+#include "svm.h"
+
+#include <stdio.h>
+
+#define checknodes(L) (struct svm_node *)luaL_checkudata(L, 1, "caap.svm.nodes")
+
+typedef struct svm_problem svm_prob;
+typedef struct svm_node svm_node;
+
+/*
+ *  struct svm_node { int index; double value; }
+ *
+ *  index -1 indicates the end of the vector,
+ *  indices must be in ascending(ASC) order
+ *
+ *  EXAMPLE
+ *
+ *  LABEL  ATTR1 ATTR2 ATTR3 ATTR4 ATTR5
+ *    1      0    0.1   0.2    0     0
+ *    2      0    0.1   0.3  -1.2    0
+ *    1     0.4    0     0     0     0
+ *    2      0    0.1    0    1.4   0.5
+ *    3    -0.1  -0.2   0.1   1.1   0.1
+ *
+ *  SPARSE - LUA
+ *    1      2, 0.1   3, 0.2
+ *    2      2, 0.1   3, 0.3   4, -1.2
+ *    1      1, 0.4
+ *    2      2, 0.1   4, 1.4   5, 0.5
+ *    3      1, -0.1  2, -0.2  3, 0.1   4, 1.1   5, 0.1
+ *
+ *  DATA - C
+ *    [1, {2,0.1, 3,0.2, -1,0.0}], [2, {2,0.1, 3,0.3, 4,-1.2, -1,0.0}], ...
+ *    [1, {1,0.4, -1,0.0}], [2 {2,0.1, 4,1.4, 5,0.5, -1,0.0}], ...
+ *    [3, {1,-0.1, 2,-0.2, 3,0.1, 4,1.1, 5,0.1, -1,0.0}]
+ *
+*/
+
+void popNode(lua_State *L, svm_node *x) {
+//    lua_rawgeti(L, -1, 1);
+//    *y = lua_tonumber(L, -1);
+//    lua_pop(L, 1);
+
+    int i, N = luaL_len(L, -1) + 1;
+    for (i=1; i<N; x++) {
+	lua_rawgeti(L, -1, i++);
+	x->index = lua_tointeger(L, -1);
+	lua_pop(L, 1);
+	lua_rawgeti(L, -1, i++);
+	x->value = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+    }
+
+    x->index = -1; x->value = 0.0; x++;
+}
+
+/*
+ *  struct svm_problem { int l; double *y; struct svm_node **x; }
+ *
+ *  l is the number of training data,
+ *  y is an array containing their target values (ints in classification),
+ *  x is an array pointers, pointing to sparse representation
+*/
+
+static int nodes(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+    int M = luaL_checkinteger(L, 2);
+    int N = luaL_checkinteger(L, 3);
+
+    if (N > M) // M runs the biggest index | number of nodes + number of labels
+	M, N = N, M;
+
+    svm_node *x = (svm_node *)lua_newuserdata(L, M*sizeof(svm_node));
+    luaL_getmetatable(L, "caap.svm.nodes");
+    lua_setmetatable(L, -2);
+
+/*    double *y = (double *)lua_newuserdata(L, N*sizeof(double));
+
+    lua_newtable(L);
+    lua_pushinteger(L, N);
+    lua_setfield(L, -2, "N");
+    lua_pushinteger(L, M);
+    lua_setfield(L, -2, "M");
+    lua_setuservalue(L, -1); // adds table-uservalue to y-vector
+*/
+
+    M = luaL_len(L, 1) + 1;
+    int i;
+    for (i=1; i<M;) {
+	lua_rawgeti(L, 1, i++);
+	popNode(L, x); // , y++ label & sparse values + endofvector (-1)
+	lua_pop(L, 1);
+    }
+
+//    lua_setuservalue(L, -1); // adds y-vector as uservalue to x-vector
+    return 1;
+}
+
+static int get_node(lua_State *L) {
+    svm_node *nodes = checknodes(L);
+    int m = luaL_checkinteger(L, 2);
+
+    lua_getuservalue(L, 1); // y-vector
+    lua_getuservalue(L, -1); // y-vector's table
+    lua_getfield(L, -1, "N");
+    int N = lua_tointeger(L, -1);
+    lua_pop(L, 3);
+
+    if (m > N) { // error - m cannot be greater than N
+    }
+
+    lua_newtable(L); // ans
+    int i = 1;
+    while (i < m) {
+	if ((nodes++)->index == -1)
+	    i++;
+    }
+    i = 1;
+    while ((*nodes++).index != -1) {
+	lua_pushnumber(L, nodes->value);
+	lua_rawseti(L, -1, i++);
+    }
+
+    return 1;
+}
+
+static int nodes_train(lua_State *L) {
+}
+
+static int nodes_len(lua_State *L) {
+printf("\nComputing length of nodes\n");
+    lua_getuservalue(L, 1); // y-vector
+    luaL_checktype(L, -1, LUA_TUSERDATA);
+printf("\ny-vector recovered\n");
+    lua_getuservalue(L, -1); // y-vector's table
+printf("\ny-vector's table recovered\n");
+    luaL_checktype(L, -1, LUA_TTABLE);
+    return 1; // table
+//    lua_getfield(L, -1, "N"); // number of labels
+//    lua_getfield(L, -2, "M"); // number of nodes
+//    return 2;
+}
+
+static int nodes_gc(lua_State *L) {
+    svm_node *nodes = checknodes(L);
+    if (nodes == NULL)
+	return 0;
+    lua_getuservalue(L, 1);
+    double *y = (double *)lua_touserdata(L, -1);
+    y = NULL;
+    nodes = NULL;
+    return 0;
+}
+
+static int nodes2string(lua_State *L) {
+    lua_pushstring(L, "svmNODES");
+    return 1;
+}
+
+// // // // // // // // // // // // //
+//
+//  add "svm & kernel types" as upvalue to method "train"
+//
+static void svm_fn(lua_State *L) {
+    lua_newtable(L); // upvalue
+    lua_pushinteger(L, C_SVC); lua_setfield(L, -2, "C");
+    lua_pushinteger(L, NU_SVC);  lua_setfield(L, -2, "NU");
+    lua_pushinteger(L, ONE_CLASS);  lua_setfield(L, -2, "ONE");
+    lua_pushinteger(L, EPSILON_SVR);  lua_setfield(L, -2, "ESVR");
+    lua_pushinteger(L, NU_SVR);  lua_setfield(L, -2, "NSVR");
+    lua_pushinteger(L, LINEAR); lua_setfield(L, -2, "LINEAR");
+    lua_pushinteger(L, POLY); lua_setfield(L, -2, "POLY");
+    lua_pushinteger(L, RBF); lua_setfield(L, -2, "RBF");
+    lua_pushinteger(L, SIGMOID); lua_setfield(L, -2, "SIGMOID");
+    lua_pushinteger(L, PRECOMPUTED); lua_setfield(L, -2, "PREC");
+    lua_pushcclosure(L, &nodes_train, 1);
+    lua_setfield(L, -2, "train");
+}
+
+static const struct luaL_Reg svm_funcs[] = {
+    {"nodes", nodes},
+    {NULL, NULL}
+};
+
+static const struct luaL_Reg nodes_meths[] = {
+    {"get", get_node},
+    {"__tostring", nodes2string},
+    {"__len", nodes_len},
+    {"__gc", nodes_gc},
+    {NULL, NULL}
+};
+
+int luaopen_lsvm (lua_State *L) {
+    luaL_newmetatable(L, "caap.svm.nodes");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -1, "__index");
+    luaL_setfuncs(L, nodes_meths, 0);
+    svm_fn(L);
+
+    // create library
+    luaL_newlib(L, svm_funcs);
+    return 1;
+}
