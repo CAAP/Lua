@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.0)
 
-project( LUASVM C )
+project( LUASVM C CXX)
 
-add_library(lsvm SHARED lsvm.c)
+add_library(lsvm SHARED svm.cpp lsvm.c)
+
 
 set_target_properties(lsvm PROPERTIES PREFIX "")
 
