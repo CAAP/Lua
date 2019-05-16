@@ -71,12 +71,22 @@ local function quote(s)
     return format(pred and "'%s'" or '%q', s)
 end
 
+--[[
+--	products
+-- description, product_key|SATUID, price
+-- tax_included, taxes, sku|clave|uid
+--]]
 local function products(items)
     assert(fd.first(items, function(it) return not(missing(it.product, PRODUCT)) end), "Missing field!\n")
     fd.reduce(items, function(it) it.product = asJSON(it.product) end)
     return items
 end
 
+--[[
+--	items
+-- product
+-- quantity, discount
+--]]
 local function items(data)
     local its = data.items
     assert(fd.first(its, function(it) return not(missing(it, ITEMS)) end), "Missing field!\n")
@@ -86,8 +96,6 @@ local function items(data)
     local ret = fd.reduce(its, fd.map(function(it) return asJSON(it) end), fd.into, {})
     data.items = format('[%s]', concat(ret, ',\n'))
 
---    print(data.items)
-
     return data
 end
 
@@ -96,9 +104,14 @@ end
 ---------------------------------
 --
 
-function M.newCustomer(data, path)
-    assert(not(missing(data, CLIENTE)), "Missing field!\n")
-    local ret = { d=quote(asJSON(data)), H='"Content-Type: application/json"', u=KEYS, s='', o=quote(path) }
+--[[
+--	customers
+-- legal_name, tax_id|rfc, email
+-- telefono, direccion { street, exterior, interior, zip, neighborhood|colonia city, municipality, state }
+--]]
+function M.newCustomer(data, rfc)
+    assert(not(missing(data, CLIENTE)), rfc .. ": Missing field!\n")
+    local ret = { d=quote(asJSON(data)), H='"Content-Type: application/json"', u=KEYS, s='', o=quote(rfc..'.txt') }
     ret = post( ret, '/customers' )
     print( ret, '\n' )
     return exec( ret )
@@ -112,18 +125,24 @@ function M.searchCustomer(query, path)
     end
     ret = post( ret, '/customers' )
     print( ret, '\n' )
-    return exec( ret )
+--    return exec( ret )
 end
+
+--[[
+--	invoices
+-- customer, items, payment_form
+-- payment_method, folio_number, series
+--]]
 
 function M.ingreso(data, path)
     assert(not(missing(data, INGRESO)), "Missing field!\n")
 
-    items(data)
+    items(data) -- make sure all fields are present
 
     local ret = { d=quote(asJSON(data)), H='"Content-Type: application/json"', u=KEYS, s='', o=quote(path) }
     ret = post( ret, '/invoices' )
     print( ret, '\n' )
-    return exec( ret )
+--    return exec( ret )
 end
 
 return M

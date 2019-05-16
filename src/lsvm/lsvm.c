@@ -184,24 +184,59 @@ static int nodes_train(lua_State *L) {
     int nr_sv = model->l; // total #SVs
     pushSV(L, SV, nr_sv);
 
-/*
-    int stype = params.svm_type;
-    if (stype == EPSILON_SVR || stype == NU_SVR) {
-	d
-    } else { // classification
-	lua_newtable(L); // SVs
-	
-	int i,j;
-	for (i=0; i<nr_sv; i++) {
-	    f
-	}
-    }
-*/
-
     svm_free_and_destroy_model( &model );
     svm_destroy_param( &params );
 
     return 3;
+}
+
+static int nodes_crossv(lua_State *L) {
+    svm_node *nodes = checknodes(L);
+    luaL_checktype(L, 2, LUA_TTABLE); // y's
+    luaL_checktype(L, 3, LUA_TTABLE); // params
+
+    int i, j, M = luaL_len(L, 2);
+    double *y = (double *)lua_newuserdata(L, M*sizeof(double));
+    for(i=0; i<M; i++) {
+	lua_rawgeti(L, 2, i+1);
+	y[i] = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+    }
+
+    svm_node **x = (svm_node **)lua_newuserdata(L, M*sizeof(svm_node *));
+    x[0] = &nodes[0]; // first reference done!
+    j = 0;
+    for (i=1; i<M; i++) {
+	while (nodes[j++].index != -1)
+	    ;
+	x[i] = &nodes[j++];
+    };
+
+    svm_prob prob;
+    prob.l = M;
+    prob.y = y;
+    prob.x = x;
+
+    svm_param params;
+    getParams(L, 3, &params);
+    lua_pop(L, 1);
+
+    lua_getfield(L, 3, "folds");
+    int nr_fold = lua_tointeger(L, -1); // XXX assert > 2 & < M
+    lua_pop(L, 1);
+
+    double *target = (double *)lua_newuserdata(L, M*sizeof(double));
+
+    svm_cross_validation(&prob, &params, nr_fold, target);
+
+    lua_newtable(L);
+    int correct = 0;
+    for (i=0; i<M; i++)
+	if (target[i] == y[i])
+	    ++correct;
+
+    lua_pushnumber(L, 100.0*correct/M);
+    return 1;
 }
 
 static int nodes_gc(lua_State *L) {
@@ -232,8 +267,13 @@ static void svm_fn(lua_State *L) {
     lua_pushinteger(L, RBF); lua_setfield(L, -2, "RBF");
     lua_pushinteger(L, SIGMOID); lua_setfield(L, -2, "SIGMOID");
     lua_pushinteger(L, PRECOMPUTED); lua_setfield(L, -2, "PREC");
+
+    lua_pushvalue(L, -1); // copy of upvalue
     lua_pushcclosure(L, &nodes_train, 1);
     lua_setfield(L, -2, "train");
+
+    lua_pushcclosure(L, &nodes_crossv, 1);
+    lua_setfield(L, -2, "crossv");
 }
 
 static const struct luaL_Reg svm_funcs[] = {
