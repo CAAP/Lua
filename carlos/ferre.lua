@@ -21,7 +21,12 @@ local open	   = io.open
 local time	   = os.time
 local date	   = os.date
 local assert	   = assert
+local pcall	   = pcall
+local pairs	   = pairs
 local concat	   = table.concat
+
+local FRUITS	   = {apple=false, apricot=false, avocado=false, banana=false, berry=false, cherry=false, coconut=false, cucumber=false, fig=false, grape=false, raisin=false, guava=false, pepper=false, corn=false, plum=false, kiwi=false, lemon=false, lime=false, lychee=false, mango=false, melon=false, olive=false, orange=false, durian=false, longan=false, pea=false, peach=false, pear=false, prune=false, pine=false, pomelo=false, pome=false, quince=false, rhubarb=false, mamey=false, soursop=false, granate=false, sapote=false}
+ 
 
 -- No more external access after this point
 _ENV = nil -- or M
@@ -110,6 +115,9 @@ local function stream(week, vers)
     return function() return iter, asweek(now()), {t=backintime(week, now()), vers=vers} end
 end
 
+local function send(srv, id, msg) return pcall(function() return srv:send_msgs{id, msg} end) end
+
+
 --------------------------------
 -- Public function definitions --
 --------------------------------
@@ -163,8 +171,7 @@ function M.urldecode(s) return s:gsub('+', '|'):gsub('%%(%x%x)', hex) end
 function M.receive(srv)
     local function msgs() return srv:recv_msgs() end -- returns iter, state & counter
     local id, more = srv:recv_msg()
-    if id and more then more = reduce(msgs, into, {}) end
-    return id, more
+    return id, more and reduce(msgs, into, {}) or {}
 end
 
 -- DUMP
@@ -207,6 +214,13 @@ function M.cache(ps)
     function MM.has( pid ) return CACHE[pid] end
 
     return MM
+end
+
+M.send = send
+
+function M.getFruit(active)
+    local _,k = fd.first(fd.keys(FRUITS), function(x,k) return not(active[k]) and not(x) end)
+    return k or 'orphan'
 end
 
 return M

@@ -201,15 +201,6 @@ static int new_poll_in(lua_State *L) {
 	    lua_pop(L, 1);
     }
 
-/*
-    for (i=0; i<N; i++) {
-	if (it[i].revents) {
-printf("ERROR: event has a non-zero value.\n");
-	    break;
-	}
-    }
-*/
-
     int rc = zmq_poll(it, N, -1);
     if (rc == -1) {
 	lua_pushnil(L);
