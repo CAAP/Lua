@@ -25,7 +25,7 @@ local pcall	   = pcall
 local pairs	   = pairs
 local concat	   = table.concat
 
-local FRUITS	   = {apple=false, apricot=false, avocado=false, banana=false, berry=false, cherry=false, coconut=false, cucumber=false, fig=false, grape=false, raisin=false, guava=false, pepper=false, corn=false, plum=false, kiwi=false, lemon=false, lime=false, lychee=false, mango=false, melon=false, olive=false, orange=false, durian=false, longan=false, pea=false, peach=false, pear=false, prune=false, pine=false, pomelo=false, pome=false, quince=false, rhubarb=false, mamey=false, soursop=false, granate=false, sapote=false}
+local FRUITS	   = {'apple', 'apricot', 'avocado', 'banana', 'berry', 'cherry', 'coconut', 'cucumber', 'fig', 'grape', 'raisin', 'guava', 'pepper', 'corn', 'plum', 'kiwi', 'lemon', 'lime', 'lychee', 'mango', 'melon', 'olive', 'orange', 'durian', 'longan', 'pea', 'peach', 'pear', 'prune', 'pine', 'pomelo', 'pome', 'quince', 'rhubarb', 'mamey', 'soursop', 'granate', 'sapote'}
  
 
 -- No more external access after this point
@@ -219,8 +219,8 @@ end
 M.send = send
 
 function M.getFruit(active)
-    local _,k = fd.first(fd.keys(FRUITS), function(x,k) return not(active[k]) and not(x) end)
-    return k or 'orphan'
+    local k = fd.first(FRUITS, function(k) return not(active[k]) end)
+    return k or 'orphan' -- and k:match'[a-z]+' and k 
 end
 
 return M
