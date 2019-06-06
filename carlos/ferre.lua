@@ -166,7 +166,7 @@ function M.decode(msg)
     return cmd, data
 end
 
-function M.urldecode(s) return s:gsub('+', '|'):gsub('%%(%x%x)', hex) end
+function M.urldecode(s) return s:gsub('+', '|'):gsub('%%(%x%x)', hex):gsub('&', '|') end
 
 function M.receive(srv)
     local function msgs() return srv:recv_msgs() end -- returns iter, state & counter
