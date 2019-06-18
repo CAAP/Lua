@@ -53,7 +53,7 @@ function M.ticket(head, data)
 
     local function procesar(w)
 	ret[#ret+1] = w.desc
-	ret[#ret+1] = campos{w.clave, w.qty, w.rea, w.unitario, w.subTotal}
+	ret[#ret+1] = campos{w.clave, w.qty, w.rea, w.unitario..' '..(w.unidad or 'PZ'), w.subTotal}
 	if (w.uidSAT) then
 	    local uid = int(w.uidSAT) or 0
 	    uid = uid>0 and uid or 'XXXXX'
