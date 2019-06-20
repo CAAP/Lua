@@ -144,7 +144,7 @@ end
 -- Fisher-Yates shuffle algorithm (in-place)
 function M.shuffle(atable)
   local N = #atable
-  for i=1,N do
+  for i=1,N-1 do
     local j = rand(i,N)
     atable[j], atable[i] = atable[i], atable[j]
   end
