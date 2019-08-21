@@ -4,6 +4,7 @@
 
 ### actual/
 
+
 for f in $(ls /home/alberto/app-ferre/ferre-*.lua) ;do
     echo 'Initializing' $f '\n'
     $lua $f &
