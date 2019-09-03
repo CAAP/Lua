@@ -4,7 +4,7 @@ project( LUAZEROMQ C )
 
 add_library(lzmq SHARED lzmq.c)
 
-target_link_libraries(lzmq "/usr/local/lib/libzmq.so.4.2")
+target_link_libraries(lzmq "/usr/local/lib/libzmq.so.5.1")
 
 set_target_properties(lzmq PROPERTIES PREFIX "")
 

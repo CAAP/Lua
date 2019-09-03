@@ -15,21 +15,6 @@
 
 extern int errno;
 
-char *err2str() {
-    switch(errno) {
-	case EAGAIN: return "non-blocking mode was requested and the message cannot be sent";
-	case ENOTSUP: return "operation not supperted by this socket type";
-	case EINVAL: return "trying to send multipart data, which this socket type does not allow";
-	case ETERM: return "the context associated with this socket was terminated";
-	case EFSM: return "socket not being in an appropriate state";
-	case EFAULT: return "message passed was invalid";
-	case ENOTSOCK: return "this socket is invalid";
-	case EINTR: return "the operation was interrupted by a signal before it was done";
-	case EHOSTUNREACH: return "the message cannot be routed";
-	default: return "undefined error ocurred";
-    }
-}
-
 // ZeroMQ patterns encapsulate hard-earned experience of the best ways to
 // distribute data and work. ZeroMQ patterns are implemented by pairs of
 // sockets with matching types. The built-in core ZeroMQ patterns are:
@@ -204,7 +189,7 @@ static int new_poll_in(lua_State *L) {
     int rc = zmq_poll(it, N, -1);
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", err2str());
+	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -236,7 +221,7 @@ static int new_proxy(lua_State *L) {
     int rc = zmq_proxy(frontend, backend, capture);
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to create proxy: %s\n", err2str());
+	lua_pushfstring(L, "ERROR: Unable to create proxy: %s\n", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -293,7 +278,7 @@ static int skt_bind (lua_State *L) {
     const char *addr = luaL_checkstring(L, 2);
     if (zmq_bind(skt, addr) == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to bind socket to endpoint: %s: %s\n", addr, err2str());
+	lua_pushfstring(L, "ERROR: Unable to bind socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -308,7 +293,7 @@ static int skt_unbind(lua_State *L) {
     const char *addr = luaL_checkstring(L, 2);
     if (-1 == zmq_unbind(skt, addr)) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to unbind socket to endpoint: %s: %s\n", addr, err2str());
+	lua_pushfstring(L, "ERROR: Unable to unbind socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -323,7 +308,7 @@ static int skt_connect (lua_State *L) {
     const char *addr = luaL_checkstring(L, 2);
     if (zmq_connect(skt, addr) == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, err2str());
+	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -343,7 +328,7 @@ static int skt_disconnect (lua_State *L) {
     const char *addr = luaL_checkstring(L, 2);
     if (zmq_disconnect(skt, addr) == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, err2str());
+	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -389,7 +374,7 @@ static int skt_send_mult_msg(lua_State *L) {
 	lua_rawgeti(L, 2, i);
 	if (-1 == send_msg(L, skt, 3, flags)) {
 	    lua_pushnil(L);
-	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", zmq_strerror( errno ));
 	    return 2;
 	}
 	lua_pop(L, 1);
@@ -397,7 +382,7 @@ static int skt_send_mult_msg(lua_State *L) {
     lua_rawgeti(L, 2, N);
     if (-1 == send_msg(L, skt, 3, nowait)) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	lua_pushfstring(L, "ERROR: message could not be sent, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pop(L, 1);
@@ -412,7 +397,7 @@ static int skt_send_msg(lua_State *L) {
     int rc = send_msg(L, skt, 2, nowait);
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: message could not be sent, %s!", err2str());
+	lua_pushfstring(L, "ERROR: message could not be sent, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushinteger(L, rc); // length of message sent
@@ -433,6 +418,27 @@ static int skt_send_msg(lua_State *L) {
 //
 // A routing ID is set on all messages received by a ZMQ_SERVER socket.
 // To send a message, your must set the routing ID of a connected peer.
+//
+// *IO*
+// data from zmq_msg_data should be read as
+// byte sequence (cast: void * -> uint8_t *)
+// special case for monitoring events
+
+const char* skt_transport_events(int e) {
+    switch(e) {
+	case ZMQ_EVENT_CONNECTED: return "CONNECTED"; break;
+	case ZMQ_EVENT_CONNECT_DELAYED: return "CONNECT_DELAYED"; break;
+	case ZMQ_EVENT_CONNECT_RETRIED: return "CONNECT_RETRIED"; break;
+	case ZMQ_EVENT_LISTENING: return "LISTENING"; break;
+	case ZMQ_EVENT_BIND_FAILED: return "BIND_FAILED"; break;
+	case ZMQ_EVENT_ACCEPTED: return "ACCEPTED"; break;
+	case ZMQ_EVENT_ACCEPT_FAILED: return "ACCEPT_FAILED"; break;
+	case ZMQ_EVENT_CLOSED: return "CLOSED"; break;
+	case ZMQ_EVENT_CLOSE_FAILED: return "CLOSE_FAILED"; break;
+	case ZMQ_EVENT_DISCONNECTED: return "DISCONNECTED"; break;
+	default: return "unknown";
+    }
+}
 
 int recv_msg(lua_State *L, void *skt, int nowait) {
     int rc;
@@ -441,17 +447,27 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
     rc = zmq_msg_recv(&msg, skt, nowait ? ZMQ_DONTWAIT : 0);
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: receiving message from a socket failed, %s!", err2str());
+	lua_pushfstring(L, "ERROR: receiving message from a socket failed, %s!", zmq_strerror( errno ));
 	return 2;
     }
-    if (rc > 0)
-	lua_pushlstring(L, zmq_msg_data( &msg ), zmq_msg_size( &msg ));
+    if (rc > 0) { // *IO*
+	size_t len = zmq_msg_size( &msg );
+	rc = strlen( lua_pushlstring(L, zmq_msg_data( &msg ), len) );
+	if ((rc != len) && (len > 2)) {
+	    uint8_t *data = (uint8_t *)zmq_msg_data( &msg );
+	    const char* mev = skt_transport_events(*(uint16_t *)data);
+	    if (strcmp(mev, "unknown") == 0)
+		lua_pushlstring(L, (const char *)data, len);
+	    else
+		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 2));
+	}
+    }
     else
 	lua_pushnil(L);
     rc = zmq_msg_close( &msg );
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: message could not be closed properly, %s!", err2str());
+	lua_pushfstring(L, "ERROR: message could not be closed properly, %s!", zmq_strerror( errno ));
 	return 2;
     }
     return zmq_msg_more( &msg );
@@ -493,15 +509,15 @@ static int skt_set_id(lua_State *L) {
 
     if(lua_gettop(L) == 2) {
 	const char* idd = luaL_checklstring(L, 2, &len);
-	rc = zmq_setsockopt(skt, ZMQ_IDENTITY, idd, len);
+	rc = zmq_setsockopt(skt, ZMQ_ROUTING_ID, idd, len);
     } else {
 	sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
 	len = strlen(identity);
-	rc = zmq_setsockopt(skt, ZMQ_IDENTITY, identity, len);
+	rc = zmq_setsockopt(skt, ZMQ_ROUTING_ID, identity, len);
     }
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", err2str());
+	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -517,15 +533,15 @@ static int skt_set_rid(lua_State *L) {
 
     if(lua_gettop(L) == 2) {
 	const char* idd = luaL_checklstring(L, 2, &len);
-	rc = zmq_setsockopt(skt, ZMQ_CONNECT_RID, idd, len);
+	rc = zmq_setsockopt(skt, ZMQ_CONNECT_ROUTING_ID, idd, len);
     } else {
 	sprintf(identity, "%04X-%04X", randof(0x10000), randof(0x10000));
 	len = strlen(identity);
-	rc = zmq_setsockopt(skt, ZMQ_CONNECT_RID, identity, len);
+	rc = zmq_setsockopt(skt, ZMQ_CONNECT_ROUTING_ID, identity, len);
     }
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", err2str());
+	lua_pushfstring(L, "ERROR: random identity could not be set on socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -538,7 +554,7 @@ static int skt_subscribe(lua_State *L) {
     int rc = zmq_setsockopt(skt, ZMQ_SUBSCRIBE, filter, strlen(filter));
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: setting subscribe filter for socket, %s!", err2str());
+	lua_pushfstring(L, "ERROR: setting subscribe filter for socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -551,7 +567,7 @@ static int skt_unsubscribe(lua_State *L) {
     int rc = zmq_setsockopt(skt, ZMQ_UNSUBSCRIBE, filter, strlen(filter));
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: unsetting subscribe filter for socket, %s!", err2str());
+	lua_pushfstring(L, "ERROR: unsetting subscribe filter for socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -566,7 +582,7 @@ static int skt_stream_notify(lua_State *L) {
     int rc = zmq_setsockopt(skt, ZMQ_STREAM_NOTIFY, &notify, len);
     if (rc == -1) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: setting stream notifications for socket, %s!", err2str());
+	lua_pushfstring(L, "ERROR: setting stream notifications for socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -587,9 +603,24 @@ static int skt_events(lua_State *L) {
 	return 1;
     } else {
 	lua_pushnil(L);
-    	lua_pushfstring(L, "ERROR: getting sockopt EVENTS for socket, %s!", err2str());
+    	lua_pushfstring(L, "ERROR: getting sockopt EVENTS for socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
+}
+
+static int skt_monitor(lua_State *L) {
+    void *skt = checkskt(L); // cliente a monitorear
+    const char* endpoint = luaL_checkstring(L, 2);
+
+    int rc = zmq_socket_monitor(skt, endpoint, ZMQ_EVENT_ALL);
+    if (rc != 0) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: starting monitor on %s, %s!", endpoint, zmq_strerror( errno ));
+	return 2;
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
 }
 
 // // // // // // // // // // // // //
@@ -641,6 +672,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"set_id",	   skt_set_id},
     {"set_rid",	   skt_set_rid},
     {"events",	   skt_events},
+    {"monitor",    skt_monitor},
     {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},
     {NULL,	   NULL}
