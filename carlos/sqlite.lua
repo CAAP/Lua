@@ -48,7 +48,7 @@ end
 
 local function header( schema )
     local ret = schema:sub( schema:find'%(' + 1, -2 )
-    local ans = str.split( ret, ',', true ):map( function(x) return x:match'%g+':gsub('"','') end)
+    local ans = fd.reduce(str.split( ret, ',', true ), fd.map( function(x) return x:match'%g+':gsub('"','') end), fd.into, {})
     return ans
 end
 

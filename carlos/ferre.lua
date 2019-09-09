@@ -169,7 +169,7 @@ end
 function M.urldecode(s) return s:gsub('+', '|'):gsub('%%(%x%x)', hex) end -- :gsub('&', '|')
 
 function M.receive(srv)
-    local function msgs() return srv:recv_msgs() end -- returns iter, state & counter
+    local function msgs() return srv:recv_msgs(true) end -- returns iter, state & counter | NOWAIT flag
     local id, more = srv:recv_msg()
     return id, more and reduce(msgs, into, {}) or {}
 end

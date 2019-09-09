@@ -14,6 +14,8 @@ local string=string
 
 local tr=require'carlos.transducers'
 
+local fd = require'carlos.fold'
+
 -- No more external access after this point
 _ENV = nil -- or M
 
@@ -60,22 +62,24 @@ function M.status( size )
 end
 
 function M.split(s, dlm, folded)
-    local ss = tr.fold()
-    function ss.__ipairs() return iter, dlm, s end
+    local ss = function() return iter, dlm, s end
+
     if folded then return ss
     else
-	local ans = ss:map( function(x) return tonumber(x) or x end )
+	local ans = fd.reduce(ss, fd.map(function(x) return tonumber(x) or x end), fd.into, {})
 	if #ans == 1 and tostring(ans[1]):match('^%s*$') then ans = nil end
 	return ans
     end
 end
 
+--[[
 function M.match(s, pattern, folded)
     local ss = tr.fold()
     function ss.__ipairs() return s:gmatch(pattern), nil, nil end
-    if folded then return s
+    if folded then return ss
     else return tr:map( function(_,x) return tonumber(x) or x end ) end
 end
+--]]
 
 function M.bigram(s1, s2)
     local set, all, both, q, p = {}, {}, {}, 0, 0

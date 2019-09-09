@@ -4,7 +4,7 @@ local M = {}
 --
 local fd	  = require'carlos.fold'
 
-local asJSON	  = require'carlos.json'.asJSON
+local asJSON	  = require'json'.encode.encode -- require'carlos.json'.asJSON
 
 local exec	  = os.execute
 local remove	  = table.remove
@@ -19,7 +19,7 @@ _ENV = nil -- or M
 
 -- Local Variables for module-only access
 --
-local HOST	 = 'https://www.facturapi.io/v1'
+local HOST	 = '127.0.0.1:5050' -- 'https://www.facturapi.io/v1'
 
 local KEYS	 = '"sk_test_YJj1GZ6r5bvWNKxzDR11klaMo7LeXQE4:R5Cwje3MZLZzvDA"'
 
@@ -32,9 +32,9 @@ local INGRESO	 = {"customer", "items", "payment_form"}
 
 INGRESO.opcional = {"payment_method", "use", "folio_number", "series", "currency", "addenda"}
 
-local ITEMS	 = {"product"}
+local ITEMS	 = {"product", "quantity"}
 
-ITEMS.opcional	 = {"quantity", "discount", "complement"}
+ITEMS.opcional	 = {"discount", "complement"}
 
 local PRODUCT	 = {"description", "product_key", "price"}
 
@@ -77,9 +77,9 @@ end
 -- tax_included, taxes, sku|clave|uid
 --]]
 local function products(items)
-    assert(fd.first(items, function(it) return not(missing(it.product, PRODUCT)) end), "Missing field!\n")
-    fd.reduce(items, function(it) it.product = asJSON(it.product) end)
-    return items
+    local e = fd.first(items, function(it) return missing(it.product, PRODUCT) end)
+    if e then return false, "EROR: PRODUCT has missing field!\n"
+    else return true end
 end
 
 --[[
@@ -89,14 +89,12 @@ end
 --]]
 local function items(data)
     local its = data.items
-    assert(fd.first(its, function(it) return not(missing(it, ITEMS)) end), "Missing field!\n")
 
-    products(its)
-
-    local ret = fd.reduce(its, fd.map(function(it) return asJSON(it) end), fd.into, {})
-    data.items = format('[%s]', concat(ret, ',\n'))
-
-    return data
+    local e = fd.first(its, function(it) return missing(it, ITEMS) end)
+    if e then return false, "ERROR: ITEM has missing field!\n"
+    else
+	return products(its)
+    end
 end
 
 ---------------------------------
@@ -110,11 +108,11 @@ end
 -- telefono, direccion { street, exterior, interior, zip, neighborhood|colonia city, municipality, state }
 --]]
 function M.newCustomer(data, rfc)
-    assert(not(missing(data, CLIENTE)), rfc .. ": Missing field!\n")
+    assert(not(missing(data, CLIENTE)), "ERROR: CLIENT has missing field!\n")
     local ret = { d=quote(asJSON(data)), H='"Content-Type: application/json"', u=KEYS, s='', o=quote(rfc..'.txt') }
     ret = post( ret, '/customers' )
     print( ret, '\n' )
-    return exec( ret )
+--    return exec( ret )
 end
 
 function M.searchCustomer(query, path)
@@ -135,9 +133,9 @@ end
 --]]
 
 function M.ingreso(data, path)
-    assert(not(missing(data, INGRESO)), "Missing field!\n")
+    assert(not(missing(data, INGRESO)), "ERROR: INGRESO has missing field!\n")
 
-    items(data) -- make sure all fields are present
+    assert( items(data) ) -- make sure all fields are present
 
     local ret = { d=quote(asJSON(data)), H='"Content-Type: application/json"', u=KEYS, s='', o=quote(path) }
     ret = post( ret, '/invoices' )
