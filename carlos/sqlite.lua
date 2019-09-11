@@ -104,9 +104,10 @@ local function connect( dbname )
     end
 
     function MM.count( tbname, clause )
-	assert( exists( tbname ) )
-	local qry =  string.format('SELECT COUNT(*) cnt FROM %q %s', tbname, clause or '')
-        return fd.first( rows( qry ), function(x) return x.cnt end ).cnt
+	if exists( tbname ) then
+	    local qry =  string.format('SELECT COUNT(*) cnt FROM %q %s', tbname, clause or '')
+            return fd.first( rows( qry ), function(x) return x.cnt end ).cnt
+	else return 0 end
     end
 
     function MM.sink( qryfn, args )

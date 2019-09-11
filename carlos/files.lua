@@ -39,6 +39,7 @@ function M.slurp(fname,pattern)
 end
 
 function M.dump(fname, astring)
+  assert( fname and astring , 'ERROR: two arguments must be given!')
   local file = assert( open(fname,'w') )
   file:write(astring)
   file:close()

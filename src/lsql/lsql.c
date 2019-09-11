@@ -395,7 +395,6 @@ static int iter (lua_State *L) {
     lua_pushinteger(L, ++cnt); // increment counter
     if (next(L, pStmt)) { return 2; } // push result table
     lua_pop(L, 1); // pop counter
-    sqlite3_finalize(pStmt); pStmt = NULL;
     return 0;
 }
 
