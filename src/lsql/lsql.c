@@ -3,7 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
-#include "sqlite3.h"
+#include <sqlite3.h>
 
 #define checkconn(L) *(sqlite3 **)luaL_checkudata(L, 1, "caap.sqlite3.connection")
 #define checkstmt(L, i) *(sqlite3_stmt **)luaL_checkudata(L, i, "caap.sqlite3.statement")
@@ -36,6 +36,10 @@ static int wstoEol(const char *z) {
     return 1;
 }
 */
+
+
+static int conn_readonly (lua_State *L);
+static int conn2string (lua_State *L);
 
 
 static int statement (lua_State *L, sqlite3 *conn) {
@@ -154,7 +158,8 @@ static int connect (lua_State *L) {
 
     /* set its metatable */
     luaL_getmetatable(L, "caap.sqlite3.connection");
-    lua_setmetatable(L, -2);
+    lua_pushvalue(L, -1);  // copy of metatable
+    lua_setmetatable(L, -3);
 
     /* try to open the given database */
     // sqlite3_open_v2(dbname, ppDB, SQLITE_OPEN_READONLY, 0);
@@ -170,7 +175,22 @@ static int connect (lua_State *L) {
 	    return 2;
     }
 
+    lua_pushvalue(L, 1); // copy of dbname
+    lua_pushcclosure(L, &conn2string, 1);
+    lua_setfield(L, -2, "__tostring");
+    lua_pushvalue(L, 1); // copy of dbname
+    lua_pushcclosure(L, &conn_readonly, 1);
+    lua_setfield(L, -2, "readonly");
+    lua_pop(L, 1); // metatable
+
     return 1;
+}
+
+static void addFun(lua_State *L, const char *path) {
+    lua_pushstring(L, path);
+    lua_pushcclosure(L, &conn2string, 1);
+    lua_setfield(L, -2, "__tostring");
+    lua_pop(L, 1); // metatable
 }
 
 static int inmemory (lua_State *L) {
@@ -179,7 +199,8 @@ static int inmemory (lua_State *L) {
 
     /* set its metatable */
     luaL_getmetatable(L, "caap.sqlite3.connection");
-    lua_setmetatable(L, -2);
+    lua_pushvalue(L, -1);  // copy of metatable
+    lua_setmetatable(L, -3);
 
     /* try to open the given database */
     int error = sqlite3_open(":memory:", ppDB);
@@ -188,6 +209,8 @@ static int inmemory (lua_State *L) {
 	    lua_pushfstring(L, "Error opening in-memory database: %s\n", sqlite3_errmsg(*ppDB) );
 	    return 2;
     }
+
+    addFun(L, ":memory:");
 
     return 1;
 }
@@ -198,7 +221,8 @@ static int temporary (lua_State *L) {
 
     /* set its metatable */
     luaL_getmetatable(L, "caap.sqlite3.connection");
-    lua_setmetatable(L, -2);
+    lua_pushvalue(L, -1);  // copy of metatable
+    lua_setmetatable(L, -3);
 
     /* try to open the given database */
     int error = sqlite3_open("", ppDB);
@@ -208,7 +232,34 @@ static int temporary (lua_State *L) {
 	    return 2;
     }
 
+    addFun(L, ":temp:");
+
     return 1;
+}
+
+/* ***************************** */
+
+static int conn_readonly (lua_State *L) {
+    sqlite3 *conn = checkconn(L);
+    const char *dbname = lua_tostring(L, lua_upvalueindex(1));
+
+    lua_pushinteger(L, sqlite3_db_readonly(conn, dbname));
+    return 1;
+}
+
+static int conn2string (lua_State *L){
+    const char *dbname = lua_tostring(L, lua_upvalueindex(1));
+    const int mutex = sqlite3_threadsafe();
+
+    lua_pushfstring(L, "Sqlite3{active=true, mutex=%d, path='%s'}", mutex, dbname);
+    return 1;
+}
+
+static int conn_gc (lua_State *L) {
+    sqlite3 *conn = checkconn(L);
+    if (conn && (sqlite3_close_v2(conn) == SQLITE_OK))
+	    conn = NULL;
+    return 0;
 }
 
 /******************************************/
@@ -272,58 +323,6 @@ return 0;
 
 /* ********** BACKUP *********** */
 
-/*
-static int stepforth(lua_State *L) {
-    sqlite3_backup *pBackup = *(sqlite3_backup **)lua_touserdata(L, lua_upvalueindex(2));
-    const int steps = lua_tointeger(L, lua_upvalueindex(3));
-
-    int rc;
-    do {
-	rc = sqlite3_backup_step(pBackup, steps);
-	if (SQLITE_OK==rc) return sqlite3_backup_remaining(pBackup);
-	if (SQLITE_DONE==rc) return 0;
-	sqlite3_sleep(250);
-    } while( 1 );
-}
-
-static int newBackup(lua_State *L) {
-    sqlite3 *connInMem = checkconn(L);
-    const char *dbname = luaL_checkstring(L, 2);
-    luaL_checkinteger(L, 3);
-
-    // ************** CONNECTION ******************** /
-    // create userdatum to store a sqlite3 connection object.
-    sqlite3 **ppDB = (sqlite3 **)lua_newuserdata(L, sizeof(sqlite3 *));
-    // set its metatable
-    luaL_getmetatable(L, "caap.sqlite3.connection");
-    lua_setmetatable(L, -2);
-    // try to open the given database
-    int error = sqlite3_open(dbname, ppDB);
-    if (*ppDB == NULL || error ) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "Error opening database \"%s\": %s\n", dbname, sqlite3_errmsg(*ppDB) );
-	return 2;
-    }
-
-    // *************** BACKUP ******************* /
-    // create userdatum to store a sqlite3_backup object.
-    sqlite3_backup **ppBackup = (sqlite3_backup **)lua_newuserdata(L, sizeof(sqlite3_backup *));
-    // set its metatable
-    luaL_getmetatable(L, "caap.sqlite3.backup"); // ADD SUPPORT for this USERDATA XXX
-    lua_setmetatable(L, -2);
-    // try to initialize the backup process
-    *ppBackup = sqlite3_backup_init(*ppDB, "main", connInMem, "main");
-    if (*ppBackup == NULL) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "Error initializing backup process \"%s\"\n", dbname);
-	return 2;
-    }
-
-    lua_pushcclosure(L, &stepforth, 3); // steps, conn & backup
-    return 1;
-}
-*/
-
 static int newBackup(lua_State *L) {
     sqlite3 *connInMem = checkconn(L);
     const char *dbname = luaL_checkstring(L, 2);
@@ -371,17 +370,18 @@ static int newBackup(lua_State *L) {
 /* ******* SINK ******** */
 
 static int onestep(lua_State *L) {
-    sqlite3 *conn = checkconn(L);
-    sqlite3_stmt *pStmt = *(sqlite3_stmt **)lua_touserdata(L, lua_upvalueindex(1));
-    luaL_checktype(L, 2, LUA_TTABLE);
+    sqlite3 *conn = *(sqlite3 **)lua_touserdata(L, lua_upvalueindex(1));
+    sqlite3_stmt *pStmt = *(sqlite3_stmt **)lua_touserdata(L, lua_upvalueindex(2));
+    luaL_checktype(L, 1, LUA_TTABLE);
     return insert(L, conn, pStmt);
 }
 
 static int newSink(lua_State *L) {
     sqlite3 *conn = checkconn(L);
     luaL_checkstring(L, 2);
+    lua_pushvalue(L, 1); // copy of conn
     statement(L, conn); // stmt
-    lua_pushcclosure(L, &onestep, 1); // stmt
+    lua_pushcclosure(L, &onestep, 2); // conn + stmt
     return 1;
 }
 
@@ -395,6 +395,7 @@ static int iter (lua_State *L) {
     lua_pushinteger(L, ++cnt); // increment counter
     if (next(L, pStmt)) { return 2; } // push result table
     lua_pop(L, 1); // pop counter
+    sqlite3_finalize(pStmt); pStmt = NULL;
     return 0;
 }
 
@@ -402,23 +403,10 @@ static int newIter (lua_State *L) {
     sqlite3 *conn = checkconn(L);
     luaL_checkstring(L, 2);
     statement(L, conn); // stmt
-    lua_pushcclosure(L, &iter, 1); // stmt
-    return 1;
-}
-
-/* ***************************** */
-
-static int conn2string (lua_State *L){
-    const int mutex = sqlite3_threadsafe();
-    lua_pushfstring(L, "Sqlite3{active=true, mutex=%d}", mutex);
-    return 1;
-}
-
-static int conn_gc (lua_State *L) {
-    sqlite3 *conn = checkconn(L);
-    if (conn && (sqlite3_close_v2(conn) == SQLITE_OK))
-	    conn = NULL;
-    return 0;
+    lua_pushcclosure(L, &iter, 1); // iter function + upvalue(statement)
+    lua_pushvalue(L, 1); // state := DB connection
+    lua_pushinteger(L, 0); // initialize counter to 0
+    return 3;
 }
 
 /* ***************************** */
@@ -490,8 +478,8 @@ static const struct luaL_Reg sql_funcs[] = {
 };
 
 static const struct luaL_Reg conn_meths[] = {
-    {"__tostring", conn2string},
     {"__gc", conn_gc},
+    {"close", conn_gc},
     {"prepare", prepareStmt},
     {"exec", exec},
     {"import", import},
@@ -530,5 +518,9 @@ int luaopen_lsql (lua_State *L) {
 
     // create library
     luaL_newlib(L, sql_funcs);
+
+    // initialize the SQLite library
+    sqlite3_initialize();
+
     return 1;
 }

@@ -10,6 +10,7 @@ local ipairs = ipairs
 local print = print
 local error = error
 local assert = assert
+local tostring = tostring
 
 local table = table
 local string = string
@@ -63,7 +64,7 @@ local function connect( dbname )
 
     local function exists( tbname ) return conn:prepare( string.format(isTable, tbname) ) end
 
-    local function rows( query ) return function() return conn:rows( query ), conn, 0 end end
+    local function rows( query ) return function() return conn:rows( query ) end end
 
     MM.exists = exists -- XXX returns prepared statement ???
 
@@ -110,21 +111,22 @@ local function connect( dbname )
 
     function MM.sink( qryfn, args )
 	local stmt = MM[qryfn]( args )
-	local insert = conn:sink( stmt )
-	return function(x) return insert( conn, x ) end
+	return conn:sink( stmt )
     end
 
-    -- IN MEMORY DATABASES --
+    -- IN MEMORY DATABASES -- XXX correct so do not need to check for this!!!
     if dbname == ":inmemory:" or dbname == ":temporary:" then
-	MM.memory = true
 	function MM.backup( dbpath, steps )
 	    return lsql.backup(conn, dbpath, steps)
 	end
     end
 
-    function MM.info()
-	local s = string.format("%s", conn)
-	return s:gsub('(Sqlite3{)', '%1'..(MM.memory and "inmemory=true, " or ""))
+    function MM.info() return tostring(conn) end
+
+    function MM.close()
+	conn:close()
+	MM = nil
+    	return true
     end
 
     return MM 

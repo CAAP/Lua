@@ -1,7 +1,9 @@
 #include <lua.h>
 #include <lauxlib.h>
+
 #include <string.h>
 #include <stdio.h>
+
 #include <openssl/evp.h>
 
 
@@ -27,6 +29,14 @@ static int digestData(lua_State *L, const EVP_MD *md, const char *mssg) {
     }
 
     lua_pushlstring(L, str, md_len*2);
+    return 1;
+}
+
+static int encBase64(lua_State *L) {
+    const char *msg = luaL_checkstring(L, 1);
+
+    BIO *64 = NULL, *wbio = NULL;
+
     return 1;
 }
 
@@ -75,6 +85,7 @@ static int cleanUp(lua_State *L) {
 
 static const struct luaL_Reg dgst_funcs[] = {
     {"digest", getDigest},
+    {"encode", },
     {NULL, NULL}
 };
 
