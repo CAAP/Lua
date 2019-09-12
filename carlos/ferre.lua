@@ -69,8 +69,6 @@ end
 -- Functions to compute the current/ongoing version
 -- based on the latest WEEK file on existence
 --
-local function asweek(t) return date('Y%YW%U', t) end
-
 local function backintime(week, t) while week < asweek(t) do t = t - 3600*24*7 end; return t end
 
 -- Functions to 
