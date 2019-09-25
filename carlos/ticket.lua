@@ -85,7 +85,7 @@ function M.ticket(head, data)
 
     ret[#ret+1] = centrado'GRACIAS POR SU COMPRA'
     ret[#ret+1] = '\27\100\7 \27\105'
-    return concat(ret, '\n')
+    return ret
 end
 
 

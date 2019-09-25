@@ -12,8 +12,6 @@ local utf8 = utf8
 
 local string=string
 
-local tr=require'carlos.transducers'
-
 local fd = require'carlos.fold'
 
 -- No more external access after this point
@@ -70,6 +68,13 @@ function M.split(s, dlm, folded)
 	if #ans == 1 and tostring(ans[1]):match('^%s*$') then ans = nil end
 	return ans
     end
+end
+
+function M.count(s, patt)
+    local ss = function() return iter, patt, s end
+    local N = 0
+    fd.reduce(ss, function(x) if #x>0 then N = N+1 end end)
+    return N
 end
 
 --[[
