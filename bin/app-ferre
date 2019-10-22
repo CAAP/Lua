@@ -4,9 +4,14 @@
 
 ### actual/
 
+BASED="/var/www/htdocs/app-ferre/logs"
 
 for f in $(ls $HOME/app-ferre/*-ferre-*.lua) ;do
-    echo 'Initializing' $f '\n'
-    $lua $f &
+	cmd="$(basename $f)"
+	cmd="$BASED/${cmd#*ferre-}"
+	logo="${cmd%.lua}.out"
+	loge="${cmd%.lua}.err"
+	echo 'Initializing' $f '\n'
+	$lua $f > $logo 2>$loge &
 done
 

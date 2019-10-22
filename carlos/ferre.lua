@@ -221,6 +221,11 @@ function M.getFruit(active)
     return k or 'orphan' -- and k:match'[a-z]+' and k 
 end
 
+function M.logger( cmd )
+    cmd = cmd:match'ferre%-([%l]+)'
+    return open(format('%s/logs/%s-out.log', HOME, cmd), 'a'), open(format('%s/logs/%s-err.log', HOME, cmd), 'a')
+end
+
 return M
 
 
