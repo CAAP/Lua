@@ -53,7 +53,7 @@ local function switch( msg, msgr )
     if cmd == 'CACHE' then
 	local fruit = msg:match'%s(%a+)'
 	CACHE.sndkch( msgr, fruit )
-	print('CACHE sent to', fruit, '\n')
+	print('version:\nCACHE sent to', fruit, '\n')
 	goto FIN
     end
 
@@ -73,6 +73,6 @@ local function switch( msg, msgr )
 
 end
 
-CACHE.store('vers', format('version %s', getVersion()))
+getVersion()
 
 return switch

@@ -37,7 +37,7 @@ local function switch( msg, msgr )
     if cmd == 'CACHE' then
 	local fruit = msg:match'%s(%a+)'
 	PINS.sndkch( msgr, fruit )
-	print('CACHE sent to', fruit, '\n')
+	print('tabs:\nCACHE sent to', fruit, '\n')
 	goto FIN
     end
     local pid = msg:match'pid=(%d+)'
