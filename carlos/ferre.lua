@@ -225,8 +225,8 @@ end
 function M.queryDB(msg)
     local fruit = msg:match'fruit=(%a+)'
     msg = msg:match('%a+%s([^!]+)'):gsub('&', '!')
-    print('Querying database:', msg, '\n')
-    local f = assert( popen(format('%s/dump-query.lua %s', APP, msg)) )
+--    print('Querying database:', msg, '\n')
+    local f = assert( popen(format('%s/dump-query.lua %s', M.APP, msg)) )
     local v = f:read'l'
     f:close()
     return format('%s query %s', fruit, v)
