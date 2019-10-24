@@ -18,6 +18,7 @@ local char	   = string.char
 local tonumber	   = tonumber
 local tointeger    = math.tointeger
 local open	   = io.open
+local popen	   = io.popen
 local time	   = os.time
 local date	   = os.date
 local assert	   = assert
@@ -221,9 +222,14 @@ function M.getFruit(active)
     return k or 'orphan' -- and k:match'[a-z]+' and k 
 end
 
-function M.logger( cmd )
-    cmd = cmd:match'ferre%-([%l]+)'
-    return open(format('%s/logs/%s-out.log', HOME, cmd), 'a'), open(format('%s/logs/%s-err.log', HOME, cmd), 'a')
+function M.queryDB(msg)
+    local fruit = msg:match'fruit=(%a+)'
+    msg = msg:match('%a+%s([^!]+)'):gsub('&', '!')
+    print('Querying database:', msg, '\n')
+    local f = assert( popen(format('%s/dump-query.lua %s', APP, msg)) )
+    local v = f:read'l'
+    f:close()
+    return format('%s query %s', fruit, v)
 end
 
 return M
