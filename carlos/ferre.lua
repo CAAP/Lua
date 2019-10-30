@@ -78,12 +78,14 @@ local function backintime(week, t) while week < asweek(t) do t = t - 3600*24*7 e
 --    w.vers = nil
 local function prepare(w) w.store = 'PRICE'; return w; end
 
+local function smart(v) return tointeger(v) or tonumber(v) or v:gsub('"',''):gsub("'",'') end
+
 local function groupMe( a )
     return function(x)
-	local k = x.clave
+	local k = smart(x.clave)
 	if not a[k] then a[k] = {clave=k} end
 	local v = a[k]
-	v[x.campo] = x.valor
+	v[x.campo] = smart(x.valor)
     end
 end
 
@@ -91,7 +93,7 @@ local function asdata(conn, clause, week)
     local data = fd.reduce(conn.query(format(QUERY, clause)), groupMe, {})
     data = fd.reduce(fd.keys(data), fd.map(prepare), fd.into, {})
     data[#data+1] = {vers=conn.count('updates'), week=week, store='VERS'}
-    return asJSON(data):gsub('""', '"'):gsub('\'"', '"'):gsub('"\'', '"')
+    return asJSON(data)
 end
 
 local function fromWeek(week, vers)
