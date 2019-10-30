@@ -8,7 +8,7 @@ local connect	   = require'carlos.sqlite'.connect
 local reduce	   = require'carlos.fold'.reduce
 local keys	   = require'carlos.fold'.keys
 local into	   = require'carlos.fold'.into
-local asJSON	   = require'carlos.json'.asJSON
+local asJSON	   = require'json'.encode -- require'carlos.json'.asJSON
 local dump	   = require'carlos.files'.dump
 local sleep	   = require'lbsd'.sleep
 local env	   = os.getenv
@@ -87,19 +87,20 @@ local function groupMe( a )
     end
 end
 
+local function asdata(conn, clause, week)
+    local data = fd.reduce(conn.query(format(QUERY, clause)), groupMe, {})
+    data = fd.reduce(fd.keys(data), fd.map(prepare), fd.into, {})
+    data[#data+1] = {vers=conn.count('updates'), week=week, store='VERS'}
+    return asJSON(data):gsub('""', '"'):gsub('\'"', '"'):gsub('"\'', '"')
+end
+
 local function fromWeek(week, vers)
     local conn =  dbconn(week)
     local vers = asnum(vers)
     local clause = vers > 0 and format('WHERE vers > %d', vers) or ''
     local N = conn.count('updates', clause)
 
-    if N > 0 then
-	local data = fd.reduce(conn.query(format(QUERY, clause)), groupMe, {})
-	data = fd.reduce(fd.keys(data), fd.map(prepare), fd.map(asJSON), fd.into, {})
-
-	data[#data+1] = asJSON{vers=conn.count('updates'), week=week, store='VERS'}
-	return concat(data, ',\n')
-    end
+    if N > 0 then return asdata(conn, clause, week) end
 end
 
 -- ITERATIVE procedure AWESOME
@@ -143,6 +144,8 @@ M.dbconn = dbconn
 M.stream = stream
 
 --M.version = version
+
+M.asdata = asdata
 
 function M.newUID() return date('%FT%TP', now()) end
 
