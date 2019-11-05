@@ -110,12 +110,16 @@ end
 local function nextWeek(t) return {t=t+SEMANA, vers=0} end
 
 local function stream(week, vers)
+    local WKK = asweek(now())
     local function iter(wk, o)
 	local w = asweek( o.t )
 	if w > wk then return nil
-	else return nextWeek(o.t), fromWeek(w, o.vers) end
+	else
+	    local q = fromWeek(w, o.vers)
+	    if not q then return iter(WKK, nextWeek(o.t))
+	    else return nextWeek(o.t), fromWeek(w, o.vers) end end
     end
-    return function() return iter, asweek(now()), {t=backintime(week, now()), vers=vers} end
+    return function() return iter, WKK, {t=backintime(week, now()), vers=vers} end
 end
 
 local function send(srv, id, msg) return pcall(function() return srv:send_msgs{id, msg} end) end
