@@ -159,6 +159,8 @@ M.stats = stats
 
 function M.into( a ) return function(x) a[#a+1] = x end end
 
+function M.flat( a ) return function(b) for _,x in ipairs(b) do a[#a+1] = x end end end
+
 function M.merge( a ) return function(x, k) if not a[k] then a[k] = x end end end
 
 function M.statsBy( a )

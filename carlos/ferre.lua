@@ -93,7 +93,8 @@ local function asdata(conn, clause, week)
     local data = fd.reduce(conn.query(format(QUERY, clause)), groupMe, {})
     data = fd.reduce(fd.keys(data), fd.map(prepare), fd.into, {})
     data[#data+1] = {vers=conn.count('updates'), week=week, store='VERS'}
-    return asJSON(data)
+--    return asJSON(data)
+    return data
 end
 
 local function fromWeek(week, vers)

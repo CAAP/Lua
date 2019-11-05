@@ -5,7 +5,7 @@ local fd	= require'carlos.fold'
 
 local cache	= require'carlos.ferre'.cache
 local decode	= require'carlos.ferre'.decode
-local dump		= require'carlos.files'.dump
+local dump	= require'carlos.files'.dump
 
 local format	= require'string'.format
 local popen	= io.popen
