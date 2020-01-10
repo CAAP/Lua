@@ -9,9 +9,11 @@ local mini=math.min
 local mod=math.fmod
 local print=print
 
+local concat = table.concat
+
 -- Local Variables for module-only access
 local huge=math.huge
-local lambda=0.8
+local lambda= 0.8
 local ilambda = 1 - lambda
 local convits=200 -- convergence iterations
 local maxits=2000
@@ -43,13 +45,29 @@ _ENV = nil -- or M
 
 -- Private function definitions --
 
-local function maxx(mxs)
-    return function( p ) local j, sa, mx = p[2], p[3]+p[4], mxs[p[1]]
-	if sa > mx[2] then mx[2] = sa; if sa > mx[1] then mx[2] = mx[1]; mx[1] = sa; mx[3] = j end end
+local function max1(mxs)
+    return function( p )
+	local i, ra  = p[1], p[4]+p[5]
+	if ra > mxs[i][1] then mxs[i] = {ra, p[2]} end
     end
 end
 
-local function updater(mxs) return function(p) local mx = mxs[p[1]]; local rho = p[3] - (mx[3] == p[2] and mx[2] or mx[1]); p[5] = p[5]*lambda + ilambda*rho end end -- rho = s - max_(s+a)
+local function maxx(mxs)
+    return function( p )
+	if p[1] == p[2] then return end -- should not send msg to itself
+	local i = p[1]
+	local sa, mx = p[3]+p[4], mxs[i]
+	if sa > mx[2] then mx[2] = sa; if sa > mx[1] then mxs[i] = {sa, mx[1], p[2]} end end
+    end
+end
+
+local function updater(mxs)
+    return function(p)
+	local mx = mxs[p[1]]
+	local rho = p[3] - (mx[3] == p[2] and mx[2] or mx[1])
+	p[5] = p[5]*lambda + ilambda*rho
+    end
+end -- rho = s - max_(s+a)
 
 local function isexemplar(p) return (p[4]+p[5]) > 0 end
 
@@ -86,6 +104,16 @@ local function availability( offaxis, diagonal )
     fd.reduce( offaxis, function(p) local s = mini(0, sum_pos[p[2]] - maxi(p[5], 0)); p[4] = p[4]*lambda + ilambda*s end )
 end
 
+local function criterion( points, diagonal )
+    -- initialization
+    local max_ra = fd.reduce( diagonal, function(mx) return function(p) mx[p[1]] = {-huge, -1} end end, {} )
+    -- find exemplar k that maximize r+a
+    fd.reduce( points, max1(max_ra) )
+
+    max_ra = fd.reduce( max_ra, fd.map(function(v) return v[2] end), fd.into, {} )
+    print( concat(max_ra, '\t') )
+end
+
 local function init(points)
     if not points.diagonal then points.diagonal = fd.reduce( points, fd.filter( function(x) return x[1] == x[2] end), fd.into, {} ) end
     if not points.offaxis then points.offaxis = fd.reduce( points, fd.filter( function(x) return x[1] ~= x[2] end), fd.into, {} ) end
@@ -107,6 +135,7 @@ function M.step( points )
     init(points)
     responsability( points, points.diagonal )
     availability( points.offaxis, points.diagonal )
+    criterion( points, points.diagonal )
     return true
 end
 
