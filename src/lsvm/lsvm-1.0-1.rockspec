@@ -17,6 +17,7 @@ build = {
     type = "cmake",
     variables = {
 	CMAKE_C_FLAGS	   = "-O2 -fPIC -Wall -pedantic",
+	CMAKE_CXX_FLAGS	   = "-O2 -fPIC -Wall -pedantic"
     },
 }
 

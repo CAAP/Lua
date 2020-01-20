@@ -38,32 +38,33 @@ void getParams(lua_State *L, int j, svm_param *param) {
     param->kernel_type = ktype;
     lua_pop(L, 2);
 
+
     param->degree = 3;
     if (ktype == POLY) {
 	lua_getfield(L, j, "degree");
 	param->degree = lua_tointeger(L, -1);
-	lua_pop(L, 2);
+	lua_pop(L, 1);
     }
 
     param->gamma = 0.0;
-    if (ktype == RBF || ktype == SIGMOID) {
+    if (ktype == RBF || ktype == SIGMOID || ktype == POLY) {
 	lua_getfield(L, j, "gamma");
 	param->gamma = lua_tonumber(L, -1);
-	lua_pop(L, 2);
+	lua_pop(L, 1);
     }
 
     param->C = 1.0;
     if (stype == C_SVC || stype == EPSILON_SVR || stype == NU_SVR) {
 	lua_getfield(L, j, "c");
 	param->C = lua_tonumber(L, -1);
-	lua_pop(L, 2);
+	lua_pop(L, 1);
     }
 
     param->nu = 0.5;
     if (stype == NU_SVC || stype == ONE_CLASS || stype == NU_SVR) {
 	lua_getfield(L, j, "nu");
 	param->nu = lua_tonumber(L, -1);
-	lua_pop(L, 2);
+	lua_pop(L, 1);
     }
 }
 
@@ -100,7 +101,29 @@ int pushSV(lua_State *L, svm_node **SV, int nr_sv) {
     return 3;
 }
 
+void target(lua_State *L, const int M, svm_prob *prob) {
+    int i;
+    for(i=0; i<M; i++) {
+	lua_rawgeti(L, 2, i+1);
+	prob->y[i] = lua_tonumber(L, -1);
+	lua_pop(L, 1);
+    }
+}
+
+void coords(lua_State *L, int M, svm_node *nodes, svm_prob *prob) {
+    prob->x[0] = &nodes[0]; // first reference done!
+    int i, j = 0;
+    for (i=1; i<M; i++) {
+	while (nodes[j++].index != -1)
+	    ;
+	prob->x[i] = &nodes[j++];
+    };
+}
+
+
 /*
+ *  data: { <label>, <idx1>,<val1>, <idx2>,<val2>, <idx3>,<val3>, ... }
+ *
  *  struct svm_node { int index; double value; }
  *
  *  index -1 indicates the end of the vector,
@@ -110,14 +133,20 @@ int pushSV(lua_State *L, svm_node **SV, int nr_sv) {
 
 static int nodes(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
-    int N = luaL_checkinteger(L, 2);
 
-    svm_node *x = (svm_node *)lua_newuserdata(L, N*sizeof(svm_node));
+    int M = 0, N = luaL_len(L, 1) + 1;
+    int i;
+    for (i=1; i<N;) {
+	lua_rawgeti(L, 1, i++);
+	M += (luaL_len(L, -1) + 1)/2; // total # of pairs (idx,val) + one more pair
+	lua_pop(L, 1);
+    }
+
+    svm_node *x = (svm_node *)lua_newuserdata(L, M*sizeof(svm_node));
     luaL_getmetatable(L, "caap.svm.nodes");
     lua_setmetatable(L, -2);
 
-    N = luaL_len(L, 1) + 1;
-    int M, i, j, k = 0;
+    int j, k = 0;
     for (i=1; i<N;) {
 	lua_rawgeti(L, 1, i++);
 // sparse values + endofvector (-1)
@@ -151,31 +180,28 @@ static int nodes_train(lua_State *L) {
     luaL_checktype(L, 2, LUA_TTABLE); // y's
     luaL_checktype(L, 3, LUA_TTABLE); // params
 
-    int i, j, M = luaL_len(L, 2);
-    double *y = (double *)lua_newuserdata(L, M*sizeof(double));
-    for(i=0; i<M; i++) {
-	lua_rawgeti(L, 2, i+1);
-	y[i] = lua_tonumber(L, -1);
-	lua_pop(L, 1);
-    }
-
-    svm_node **x = (svm_node **)lua_newuserdata(L, M*sizeof(svm_node *));
-    x[0] = &nodes[0]; // first reference done!
-    j = 0;
-    for (i=1; i<M; i++) {
-	while (nodes[j++].index != -1)
-	    ;
-	x[i] = &nodes[j++];
-    };
+    int M = luaL_len(L, 2);
 
     svm_prob prob;
     prob.l = M;
-    prob.y = y;
-    prob.x = x;
+    prob.y = (double *)lua_newuserdata(L, M*sizeof(double));
+    prob.x = (svm_node **)lua_newuserdata(L, M*sizeof(svm_node *));
+
+    target(L, M, &prob);
+    coords(L, M, nodes, &prob);
 
     svm_param params;
     getParams(L, 3, &params);
-    lua_pop(L, 1);
+
+    if ( !(params.gamma > 0.0) )
+	params.gamma = 1.0/M;
+
+    const char *err = svm_check_parameter(&prob, &params);
+    if (err) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "Error: %s\n", err);
+	return 2;
+    }
 
     svm_model *model = svm_train(&prob, &params);
     svm_node **SV = model->SV;
@@ -195,44 +221,38 @@ static int nodes_crossv(lua_State *L) {
     luaL_checktype(L, 2, LUA_TTABLE); // y's
     luaL_checktype(L, 3, LUA_TTABLE); // params
 
-    int i, j, M = luaL_len(L, 2);
-    double *y = (double *)lua_newuserdata(L, M*sizeof(double));
-    for(i=0; i<M; i++) {
-	lua_rawgeti(L, 2, i+1);
-	y[i] = lua_tonumber(L, -1);
-	lua_pop(L, 1);
-    }
-
-    svm_node **x = (svm_node **)lua_newuserdata(L, M*sizeof(svm_node *));
-    x[0] = &nodes[0]; // first reference done!
-    j = 0;
-    for (i=1; i<M; i++) {
-	while (nodes[j++].index != -1)
-	    ;
-	x[i] = &nodes[j++];
-    };
+    int M = luaL_len(L, 2);
 
     svm_prob prob;
     prob.l = M;
-    prob.y = y;
-    prob.x = x;
+    prob.y = (double *)lua_newuserdata(L, M*sizeof(double));
+    prob.x = (svm_node **)lua_newuserdata(L, M*sizeof(svm_node *));
+
+    target(L, M, &prob);
+    coords(L, M, nodes, &prob);
 
     svm_param params;
     getParams(L, 3, &params);
-    lua_pop(L, 1);
+
+    const char *err = svm_check_parameter(&prob, &params);
+    if (err) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "Error: %s\n", err);
+	return 2;
+    }
 
     lua_getfield(L, 3, "folds");
     int nr_fold = lua_tointeger(L, -1); // XXX assert > 2 & < M
     lua_pop(L, 1);
 
-    double *target = (double *)lua_newuserdata(L, M*sizeof(double));
+    double *gold = (double *)lua_newuserdata(L, M*sizeof(double));
 
-    svm_cross_validation(&prob, &params, nr_fold, target);
+    svm_cross_validation(&prob, &params, nr_fold, gold);
 
     lua_newtable(L);
-    int correct = 0;
+    int i, correct = 0;
     for (i=0; i<M; i++)
-	if (target[i] == y[i])
+	if (gold[i] == prob.y[i])
 	    ++correct;
 
     lua_pushnumber(L, 100.0*correct/M);
@@ -251,11 +271,24 @@ static int nodes2string(lua_State *L) {
     return 1;
 }
 
+static int nodes_len(lua_State *L) {
+    svm_node *nodes = checknodes(L);
+    int i, j = 0, N = luaL_checkinteger(L, 2);
+
+    for (i=0; i<N; i++) {
+	while (nodes[j++].index != -1)
+		;
+    }
+
+    lua_pushinteger(L, j-N);
+    return 1;
+}
+
 // // // // // // // // // // // // //
 //
 //  add "svm & kernel types" as upvalue to method "train"
 //
-static void svm_fn(lua_State *L) {
+static void train_upvalue(lua_State *L) {
     lua_newtable(L); // upvalue
     lua_pushinteger(L, C_SVC); lua_setfield(L, -2, "C");
     lua_pushinteger(L, NU_SVC);  lua_setfield(L, -2, "NU");
@@ -267,32 +300,34 @@ static void svm_fn(lua_State *L) {
     lua_pushinteger(L, RBF); lua_setfield(L, -2, "RBF");
     lua_pushinteger(L, SIGMOID); lua_setfield(L, -2, "SIGMOID");
     lua_pushinteger(L, PRECOMPUTED); lua_setfield(L, -2, "PREC");
-
-    lua_pushvalue(L, -1); // copy of upvalue
-    lua_pushcclosure(L, &nodes_train, 1);
-    lua_setfield(L, -2, "train");
-
-    lua_pushcclosure(L, &nodes_crossv, 1);
-    lua_setfield(L, -2, "crossv");
 }
+
+static const struct luaL_Reg nodes_meths[] = {
+    {"len", nodes_len},
+    {"__tostring", nodes2string},
+    {"__gc", nodes_gc},
+    {NULL, NULL}
+};
+
+static const struct luaL_Reg train_meths[] = {
+    {"train", nodes_train},
+    {"crossv", nodes_crossv},
+    {NULL, NULL}
+};
 
 static const struct luaL_Reg svm_funcs[] = {
     {"nodes", nodes},
     {NULL, NULL}
 };
 
-static const struct luaL_Reg nodes_meths[] = {
-    {"__tostring", nodes2string},
-    {"__gc", nodes_gc},
-    {NULL, NULL}
-};
-
 int luaopen_lsvm (lua_State *L) {
     luaL_newmetatable(L, "caap.svm.nodes");
-    lua_pushvalue(L, -1);
+    lua_pushvalue(L, -1); // copy of metatable
     lua_setfield(L, -1, "__index");
     luaL_setfuncs(L, nodes_meths, 0);
-    svm_fn(L);
+    train_upvalue(L); // create upvalue for train_meths
+    luaL_setfuncs(L, train_meths, 1);
+
 
     // create library
     luaL_newlib(L, svm_funcs);

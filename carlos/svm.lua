@@ -3,6 +3,7 @@ local M = {}
 
 -- Import Section
 local fd = require'carlos.fold'
+local asint = math.tointeger
 
 local nodes = require'lsvm'.nodes
 
@@ -13,6 +14,22 @@ local nodes = require'lsvm'.nodes
 _ENV = nil -- or M
 
 -- Function definitions
+
+
+
+--    svm_data of the form
+--    <label> <index>:<value> <index>:<value> ...
+--    e.g. +1 1:0.708333 2:1 3:1 4:-0.320755 5:-0.105023 6:-1 ...
+
+local function svmline(line)
+    local label = asint( line:match'[%+%-]%d' )
+    local ret = {label}
+    for i,v in line:gmatch'(%d+):([%.%-%d]+)' do
+	ret[#ret+1] = i
+	ret[#ret+1] = v
+    end
+    return ret
+end
 
 --[[
 --	The Cascade SVM
@@ -61,6 +78,22 @@ _ENV = nil -- or M
  *    [3, {1,-0.1, 2,-0.2, 3,0.1, 4,1.1, 5,0.1, -1,0.0}]
 --]]
 
+
+--[[
+--    svm_data of the form
+--    <label> <index>:<value> <index>:<value> ...
+--    e.g. +1 1:0.708333 2:1 3:1 4:-0.320755 5:-0.105023 6:-1 ...
+--    is converted to data of the form
+--    {label, index1, value1, index2, value2, index3, value3, ...}
+--    e.g. {1, 1, 0.708333, 2, 1, 3, 1, 4, -0.320755, ...}
+--]]
+function M.readsvm( data )
+    local ret = fd.reduce(data, fd.map(svmline), fd.into, {})
+    local svmNodes = nodes(ret)
+    local ys = fd.reduce(ret, fd.map(function(a) return a[1] end), fd.into, {})
+
+    return ret, ys, svmNodes
+end
 
 
 return M
