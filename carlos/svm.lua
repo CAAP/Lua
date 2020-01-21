@@ -73,13 +73,10 @@ end
  *    3      1, -0.1  2, -0.2  3, 0.1   4, 1.1   5, 0.1
  *
  *  DATA - C
- *    [1, {2,0.1, 3,0.2, -1,0.0}], [2, {2,0.1, 3,0.3, 4,-1.2, -1,0.0}], ...
- *    [1, {1,0.4, -1,0.0}], [2 {2,0.1, 4,1.4, 5,0.5, -1,0.0}], ...
- *    [3, {1,-0.1, 2,-0.2, 3,0.1, 4,1.1, 5,0.1, -1,0.0}]
---]]
+ *    {1, 2, 0.1, 3, 0.2, -1, 0.0}, {2, 2, 0.1, 3, 0.3, 4, -1.2, -1, 0.0},
+ *    {1, 1, 0.4, -1, 0.0}, {2, 2, 0.1, 4, 1.4, 5, 0.5, -1, 0.0},
+ *    {3, 1,-0.1, 2,-0.2, 3,0.1, 4,1.1, 5,0.1, -1,0.0}
 
-
---[[
 --    svm_data of the form
 --    <label> <index>:<value> <index>:<value> ...
 --    e.g. +1 1:0.708333 2:1 3:1 4:-0.320755 5:-0.105023 6:-1 ...
@@ -95,5 +92,22 @@ function M.readsvm( data )
     return ret, ys, svmNodes
 end
 
+
+--[[
+ *  EXAMPLE
+ *
+ *  training instance xi:
+ *  <label> 0:i 1:K(xi,x1) ... L:K(xi,xL)
+ *
+ *  the first column must be the ID of xi
+ *
+ *  testing instance x:
+ *  <label> 0:? 1:K(x,x1) ... L:K(x,xL)
+ *
+ *  the first column can be any value ?
+ *
+--]]
+function M.precomputed( data )
+end
 
 return M

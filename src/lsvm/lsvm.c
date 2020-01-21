@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #define checknodes(L) (struct svm_node *)luaL_checkudata(L, 1, "caap.svm.nodes")
+#define checksvecs(L) (struct svm_node **)luaL_checkudata(L, 1, "caap.svm.svecs")
 
 typedef struct svm_problem   svm_prob;
 typedef struct svm_node      svm_node;
@@ -69,6 +70,20 @@ void getParams(lua_State *L, int j, svm_param *param) {
 }
 
 /************************/
+
+int indices(lua_State *L, svm_model *model) {
+    lua_newtable(L);
+
+    if (model->sv_indices != NULL)
+	for(int i=0;i<model->l;) {
+	    lua_pushinteger( L, model->sv_indices[i] );
+    	    lua_rawseti(L, -2, ++i);
+	}
+
+    return 1;
+}
+
+//    svm_get_sv_indices(const struct svm_model *model, int *sv_indices);
 
 int pushSV(lua_State *L, svm_node **SV, int nr_sv) {
     int i, j, k = nr_sv;
@@ -204,16 +219,18 @@ static int nodes_train(lua_State *L) {
     }
 
     svm_model *model = svm_train(&prob, &params);
-    svm_node **SV = model->SV;
+//    svm_node **SV = model->SV;
 
     // SVs
-    int nr_sv = model->l; // total #SVs
-    pushSV(L, SV, nr_sv);
+//    int nr_sv = model->l; // total #SVs
+//    pushSV(L, SV, nr_sv); // SVs, #SVs, #nodes
+    indices( L, model ); // push table of indices
 
     svm_free_and_destroy_model( &model );
     svm_destroy_param( &params );
 
-    return 3;
+//    return 3;
+    return 1;
 }
 
 static int nodes_crossv(lua_State *L) {
