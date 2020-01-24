@@ -15,7 +15,28 @@ _ENV = nil -- or M
 
 -- Function definitions
 
+local function cmatrix( ys, preds )
+    local tp, tn, fp, fn = 0, 0, 0, 0
 
+    for i,y in ipairs(ys) do
+	if y == preds[i] then
+	    if y > 0 then tp = tp+1 else tn = tn+1 end
+	else
+	    if y > 0 then fn = fn+1 else fp = fp+1 end
+	end
+    end
+
+    return {tp=tp, tn=tn, fp=fp, fn=fn}
+end
+
+local function accuracy( cmat )
+    cmat.sn = cmat.tp / (cmat.tp + cmat.fn)
+    cmat.sp = cmat.tp / (cmat.tp + cmat.fp)
+    cmat.nsn = cmat.tn / (cmat.tn + cmat.fp)
+    cmat.nsp = cmat.tn / (cmat.tn + cmat.fn)
+
+    return cmat
+end
 
 --    svm_data of the form
 --    <label> <index>:<value> <index>:<value> ...

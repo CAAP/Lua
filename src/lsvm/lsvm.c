@@ -4,6 +4,7 @@
 #include "svm.h"
 
 #include <stdio.h>
+#include <math.h>
 
 #define checknodes(L) (struct svm_node *)luaL_checkudata(L, 1, "caap.svm.nodes")
 #define checksvecs(L) (struct svm_node **)luaL_checkudata(L, 1, "caap.svm.svecs")
@@ -17,6 +18,8 @@ typedef struct svm_model     svm_model;
  *  struct svm_parameter
  *
 */
+
+double round(double x) { return floor(x*100)/100.0; }
 
 void getParams(lua_State *L, int j, svm_param *param) {
     luaL_checktype(L, j, LUA_TTABLE);
@@ -79,6 +82,44 @@ int indices(lua_State *L, svm_model *model) {
 	    lua_pushinteger( L, model->sv_indices[i] );
     	    lua_rawseti(L, -2, ++i);
 	}
+
+    return 1;
+}
+
+int predict_node(lua_State *L, svm_model *model, svm_node *x) {
+    int i,nr_class = model->nr_class;
+    int k = 1;
+    if(!(model->param.svm_type == ONE_CLASS ||
+	model->param.svm_type == EPSILON_SVR ||
+	model->param.svm_type == NU_SVR))
+	    k = nr_class*(nr_class-1)/2;
+
+    if (k > 1) {
+	double *dec_values = (double *)lua_newuserdata(L, k*sizeof(double));
+	svm_predict_values(model, x, dec_values);
+	lua_newtable(L);
+	for (i=0; i<k;) {
+	    lua_pushnumber(L, round(dec_values[i++]));
+	    lua_rawseti(L, -2, i);
+	}
+    } else {
+	double dec = 0.0;
+	svm_predict_values(model, x, &dec);
+	lua_pushnumber(L, round(dec));
+    }
+
+    return 1;
+}
+
+int predict_nodes(lua_State *L, svm_model *model, svm_prob *prob) {
+    int i,N = prob->l;
+    svm_node **xs = prob->x;
+
+    lua_newtable(L);
+    for (i=0; i<N;) {
+	predict_node(L, model, xs[i++]); // push preds on stack
+	lua_rawseti(L, -2, i);
+    }
 
     return 1;
 }
@@ -225,12 +266,13 @@ static int nodes_train(lua_State *L) {
 //    int nr_sv = model->l; // total #SVs
 //    pushSV(L, SV, nr_sv); // SVs, #SVs, #nodes
     indices( L, model ); // push table of indices
+    predict_nodes(L, model, &prob);
 
     svm_free_and_destroy_model( &model );
     svm_destroy_param( &params );
 
 //    return 3;
-    return 1;
+    return 2;
 }
 
 static int nodes_crossv(lua_State *L) {
