@@ -10,8 +10,16 @@
 
 #define randof(num) (int)((float)(num)*rand()/(RAND_MAX+1.0))
 
+typedef struct {
+    uint8_t public_key [32];
+    uint8_t secret_key [32];
+    char public_txt [41];
+    char secret_txt [41];
+} cert_t;
+
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
+#define checkkey(L) (cert_t *)luaL_checkudata(L, 1, "caap.zmq.keypair")
 
 extern int errno;
 
@@ -166,6 +174,119 @@ static int ctx_gc (lua_State *L) {
 	ctx = NULL;
     return 0;
 }
+
+// Key pair
+//
+static int new_keypair(lua_State *L) {
+    cert_t *cert = (cert_t *)lua_newuserdata(L, sizeof(cert_t));
+    luaL_getmetatable(L, "caap.zmq.keypair");
+    lua_setmetatable(L, -2);
+
+    if (lua_gettop(L) > 1) {
+	const char *public = luaL_checkstring(L, 1);
+	const char *secret = luaL_checkstring(L, 2);
+	if ((strlen(public) > 41) || (strlen(secret) > 41)) {
+	    lua_pushnil(L);
+	    lua_pushstring(L, "ERROR: key-pair out of size, string greater than 41 chars.\n");
+	    return 2;
+	} else {
+	    strcpy(cert->public_txt, public);
+	    strcpy(cert->secret_txt, secret);
+	}
+    }
+
+    int rc = zmq_curve_keypair(cert->public_txt, cert->secret_txt);
+    if (rc != 0) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: unable to create curve keypair: %s\n", zmq_strerror( errno ));
+	return 2;
+    }
+
+    zmq_z85_decode(cert->public_key, cert->public_txt);
+    zmq_z85_decode(cert->secret_key, cert->secret_txt);
+
+    return 1;
+}
+
+static int key_public(lua_State *L) {
+    cert_t *cert = checkkey(L);
+    lua_pushstring(L, cert->public_txt);
+    return 1;
+}
+
+static int key_secret(lua_State *L) {
+    cert_t *cert = checkkey(L);
+    lua_pushstring(L, cert->secret_txt);
+    return 1;
+}
+
+// To become a CURVE server, the application sets
+// the ZMQ_CURVE_SERVER option on the socket
+// and then sets the ZMQ_CURVE_SECRETKEY option
+// with its secret key
+static int key_server(lua_State *L) {
+    cert_t *cert = checkkey(L);
+    void *skt = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+    int issrv = 1;
+    size_t len = sizeof(cert->secret_key);
+
+    int rc = zmq_setsockopt(skt, ZMQ_CURVE_SERVER, &issrv, sizeof(int));
+    zmq_setsockopt(skt, ZMQ_CURVE_SECRETKEY, cert->secret_key, len);
+    if (rc != 0) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: unable to configure CURVE server: %s\n", zmq_strerror( errno ));
+	return 2;
+    } else {
+	lua_pushboolean(L, 1);
+	return 1;
+    }
+}
+
+// To become a CURVE client, the application sets
+// the ZMQ_CURVE_SERVERKEY option with the public key
+// of the server it intends to connect to
+// and then sets the ZMQ_CURVE_ PUBLICKEY & SECRETKEY
+static int key_client(lua_State *L) {
+    cert_t *cert = checkkey(L);
+    cert_t *server = (cert_t *)luaL_checkudata(L, 2, "caap.zmq.keypair");
+    void *skt = *(void **)luaL_checkudata(L, 3, "caap.zmq.socket");
+
+    size_t len = sizeof(server->public_key);
+    int rc = zmq_setsockopt(skt, ZMQ_CURVE_SERVERKEY, server->public_key, len);
+    if (rc != 0)
+	goto ZERROR;
+
+    len = sizeof(cert->public_key);
+    rc = zmq_setsockopt(skt, ZMQ_CURVE_PUBLICKEY, cert->public_key, len);
+    if (rc != 0)
+	goto ZERROR;
+
+    len = sizeof(cert->secret_key);
+    rc = zmq_setsockopt(skt, ZMQ_CURVE_SECRETKEY, cert->secret_key, len);
+
+    ZERROR:
+    if (rc != 0) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: unable to configure CURVE client: %s\n", zmq_strerror( errno ));
+	return 2;
+    } else {
+	lua_pushboolean(L, 1);
+	return 1;
+    }
+}
+
+static int key_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Active Key-Pair}");
+    return 1;
+}
+
+static int key_gc (lua_State *L) {
+    cert_t *cert = checkkey(L);
+    if (cert)
+	cert = NULL;
+    return 0;
+}
+
 
 // POLLER
 //
@@ -651,12 +772,23 @@ static const struct luaL_Reg zmq_funcs[] = {
     {"context", new_context},
     {"proxy",   new_proxy},
     {"pollin",  new_poll_in},
+    {"keypair", new_keypair},
     {NULL, 	NULL}
 };
 
 static const struct luaL_Reg ctx_meths[] = {
     {"__tostring", ctx_asstr},
     {"__gc",	   ctx_gc},
+    {NULL,	   NULL}
+};
+
+static const struct luaL_Reg key_meths[] = {
+    {"public", key_public},
+    {"secret", key_secret},
+    {"server", key_server},
+    {"client", key_client},
+    {"__tostring", key_asstr},
+    {"__gc",	   key_gc},
     {NULL,	   NULL}
 };
 
@@ -690,6 +822,11 @@ int luaopen_lzmq (lua_State *L) {
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, skt_meths, 0);
+
+    luaL_newmetatable(L, "caap.zmq.keypair");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, key_meths, 0);
 
     // create library
     luaL_newlib(L, zmq_funcs);

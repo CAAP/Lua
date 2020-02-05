@@ -43,7 +43,7 @@ end
 --    e.g. +1 1:0.708333 2:1 3:1 4:-0.320755 5:-0.105023 6:-1 ...
 
 local function svmline(line)
-    local label = asint( line:match'[%+%-]%d' )
+    local label = asint( line:match'[%+%-]?%d' )
     local ret = {label}
     for i,v in line:gmatch'(%d+):([%.%-%d]+)' do
 	ret[#ret+1] = i

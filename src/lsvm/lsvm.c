@@ -252,6 +252,16 @@ static int nodes_train(lua_State *L) {
     if ( !(params.gamma > 0.0) )
 	params.gamma = 1.0/M;
 
+    int i;
+    if ( params.kernel_type == PRECOMPUTED )
+	for (i=0; i<M; i++) {
+	    if (prob.x[i][0].index != 0) {
+		lua_pushnil(L);
+		lua_pushstring(L, "Error: first column must be 0:serial_number\n");
+		return 2;
+	    }
+	}
+
     const char *err = svm_check_parameter(&prob, &params);
     if (err) {
 	lua_pushnil(L);
