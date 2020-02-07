@@ -185,7 +185,7 @@ static int new_keypair(lua_State *L) {
     if (lua_gettop(L) > 1) {
 	const char *public = luaL_checkstring(L, 1);
 	const char *secret = luaL_checkstring(L, 2);
-	if ((strlen(public) > 41) || (strlen(secret) > 41)) {
+	if ((strlen(public) > 40) || (strlen(secret) > 40)) {
 	    lua_pushnil(L);
 	    lua_pushstring(L, "ERROR: key-pair out of size, string greater than 41 chars.\n");
 	    return 2;
