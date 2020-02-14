@@ -258,7 +258,7 @@ static int key_client(lua_State *L) {
     }
 
     uint8_t public_key [32];
-    zmq_z85_decode(&public_key, public_txt);
+    zmq_z85_decode(public_key, public_txt);
     int rc = zmq_setsockopt(skt, ZMQ_CURVE_SERVERKEY, public_key, sizeof(public_key));
     if (rc != 0)
 	goto ZERROR;
@@ -771,7 +771,7 @@ static int skt_curve_server(lua_State *L) {
     }
 
     uint8_t secret_key [32];
-    zmq_z85_decode(&secret_key, secret_txt);
+    zmq_z85_decode(secret_key, secret_txt);
     int issrv = 1;
     int rc = zmq_setsockopt(skt, ZMQ_CURVE_SERVER, &issrv, sizeof(int));
     if (rc != 0)
