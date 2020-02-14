@@ -193,14 +193,12 @@ static int new_keypair(lua_State *L) {
 	    strcpy(cert->public_txt, public);
 	    strcpy(cert->secret_txt, secret);
 	}
-    }
-
-    int rc = zmq_curve_keypair(cert->public_txt, cert->secret_txt);
-    if (rc != 0) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: unable to create curve keypair: %s\n", zmq_strerror( errno ));
-	return 2;
-    }
+    } else
+	if (zmq_curve_keypair(cert->public_txt, cert->secret_txt) != 0) {
+	    lua_pushnil(L);
+	    lua_pushfstring(L, "ERROR: unable to create curve keypair: %s\n", zmq_strerror( errno ));
+	    return 2;
+	}
 
     zmq_z85_decode(cert->public_key, cert->public_txt);
     zmq_z85_decode(cert->secret_key, cert->secret_txt);
@@ -220,6 +218,7 @@ static int key_secret(lua_State *L) {
     return 1;
 }
 
+/*
 // To become a CURVE server, the application sets
 // the ZMQ_CURVE_SERVER option on the socket
 // and then sets the ZMQ_CURVE_SECRETKEY option
@@ -241,6 +240,7 @@ static int key_server(lua_State *L) {
 	return 1;
     }
 }
+*/
 
 // To become a CURVE client, the application sets
 // the ZMQ_CURVE_SERVERKEY option with the public key
@@ -248,15 +248,22 @@ static int key_server(lua_State *L) {
 // and then sets the ZMQ_CURVE_ PUBLICKEY & SECRETKEY
 static int key_client(lua_State *L) {
     cert_t *cert = checkkey(L);
-    cert_t *server = (cert_t *)luaL_checkudata(L, 2, "caap.zmq.keypair");
-    void *skt = *(void **)luaL_checkudata(L, 3, "caap.zmq.socket");
+    void *skt = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+    const char *public_txt = luaL_checkstring(L, 3);
 
-    size_t len = sizeof(server->public_key);
-    int rc = zmq_setsockopt(skt, ZMQ_CURVE_SERVERKEY, server->public_key, len);
+    if (strlen(public_txt) > 40) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: key-pair out of size, string greater than 40 chars.\n");
+	return 2;
+    }
+
+    uint8_t public_key [32];
+    zmq_z85_decode(&public_key, public_txt);
+    int rc = zmq_setsockopt(skt, ZMQ_CURVE_SERVERKEY, public_key, sizeof(public_key));
     if (rc != 0)
 	goto ZERROR;
 
-    len = sizeof(cert->public_key);
+    int len = sizeof(cert->public_key);
     rc = zmq_setsockopt(skt, ZMQ_CURVE_PUBLICKEY, cert->public_key, len);
     if (rc != 0)
 	goto ZERROR;
@@ -622,7 +629,8 @@ static int skt_recv_msg(lua_State *L) {
     return 2;
 }
 
-// Set simple random printable identity on socket
+// Set the ROUTING ID when connecting to a ROUTER
+// if empty, sets a simple random printable identity
 static int skt_set_id(lua_State *L) {
     void *skt = checkskt(L);
     char identity[10];
@@ -646,6 +654,9 @@ static int skt_set_id(lua_State *L) {
     return 1;
 }
 
+// Set the PEER ID of the peer connected via zmq_connect
+// Only applies to the first subsequent call to zmq_connect
+// if empty, sets a simple random printable identity
 static int skt_set_rid(lua_State *L) {
     void *skt = checkskt(L);
 
@@ -745,6 +756,41 @@ static int skt_monitor(lua_State *L) {
     return 1;
 }
 
+// To become a CURVE server, the application sets
+// the ZMQ_CURVE_SERVER option on the socket
+// and then sets the ZMQ_CURVE_SECRETKEY option
+// with its secret key
+static int skt_curve_server(lua_State *L) {
+    void *skt = checkskt(L);
+    const char* secret_txt = luaL_checkstring(L, 2);
+
+    if (strlen(secret_txt) > 40) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: key-pair out of size, string greater than 40 chars.\n");
+	return 2;
+    }
+
+    uint8_t secret_key [32];
+    zmq_z85_decode(&secret_key, secret_txt);
+    int issrv = 1;
+    int rc = zmq_setsockopt(skt, ZMQ_CURVE_SERVER, &issrv, sizeof(int));
+    if (rc != 0)
+	goto ZERRORS;
+
+    rc = zmq_setsockopt(skt, ZMQ_CURVE_SECRETKEY, secret_key, sizeof(secret_key));
+
+    ZERRORS:
+    if (rc != 0) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: unable to configure CURVE server: %s\n", zmq_strerror( errno ));
+	return 2;
+    } else {
+	lua_pushboolean(L, 1);
+	return 1;
+    }
+}
+
+
 // // // // // // // // // // // // //
 //
 //  add "socket types" as upvalue to method "socket"
@@ -786,7 +832,6 @@ static const struct luaL_Reg ctx_meths[] = {
 static const struct luaL_Reg key_meths[] = {
     {"public", key_public},
     {"secret", key_secret},
-    {"server", key_server},
     {"client", key_client},
     {"__tostring", key_asstr},
     {"__gc",	   key_gc},
@@ -806,6 +851,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"set_rid",	   skt_set_rid},
     {"events",	   skt_events},
     {"monitor",    skt_monitor},
+    {"curve", 	   skt_curve_server},
     {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},
     {NULL,	   NULL}
