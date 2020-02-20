@@ -631,6 +631,16 @@ static int skt_recv_msg(lua_State *L) {
 
 // Set the ROUTING ID when connecting to a ROUTER
 // if empty, sets a simple random printable identity
+// An applicaction that uses a ROUTER to talk to specific
+// peers can convert a logical address to an identity.
+// Because the ROUTER only announces the identity when
+// that peer sends a message, you can only really reply.
+// However you can force the ROUTER to use a logical
+// address in place of its identity, setting the socket
+// identiy, using zmq_setsockopt. At connection time the
+// peer socket tells the router socket, use this identity
+// for this connection. Otherwise, the ROUTER generates
+// its usual arbitrary random identity.
 static int skt_set_id(lua_State *L) {
     void *skt = checkskt(L);
     char identity[10];
