@@ -123,7 +123,10 @@ static int new_context(lua_State *L) {
 
 static int skt_subscribe(lua_State *L);
 static int skt_unsubscribe(lua_State *L);
+static int skt_set_rid(lua_State *L);
 static int skt_stream_notify(lua_State *L);
+static int skt_immediate(lua_State *L);
+static int skt_set_id(lua_State *L);
 
 static int new_socket(lua_State *L) {
     void *ctx = checkctx(L);
@@ -144,7 +147,7 @@ static int new_socket(lua_State *L) {
 	return 2;
     }
 
-    if(type == ZMQ_SUB || type == ZMQ_XSUB) {
+    if(type == ZMQ_SUB) { //   || type == ZMQ_XSUB
 	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_subscribe, 0);
 	lua_setfield(L, -2, "subscribe");
@@ -157,6 +160,27 @@ static int new_socket(lua_State *L) {
 	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_stream_notify, 0);
 	lua_setfield(L, -2, "notify");
+	lua_pop(L, 1); // pop metatable
+    }
+
+    if(type == ZMQ_STREAM || type == ZMQ_ROUTER) {
+	luaL_getmetatable(L, "caap.zmq.socket");
+	lua_pushcclosure(L, &skt_set_rid, 0);
+	lua_setfield(L, -2, "set_rid");
+	lua_pop(L, 1); // pop metatable
+    }
+
+    if(type == ZMQ_REQ || type == ZMQ_PUSH || type == ZMQ_DEALER) {
+	luaL_getmetatable(L, "caap.zmq.socket");
+	lua_pushcclosure(L, &skt_immediate, 0);
+	lua_setfield(L, -2, "immediate");
+	lua_pop(L, 1); // pop metatable
+    }
+
+    if(type == ZMQ_REQ || type == ZMQ_REP || type == ZMQ_DEALER || type == ZMQ_ROUTER ) {
+	luaL_getmetatable(L, "caap.zmq.socket");
+	lua_pushcclosure(L, &skt_set_id, 0);
+	lua_setfield(L, -2, "set_id");
 	lua_pop(L, 1); // pop metatable
     }
 
@@ -732,6 +756,25 @@ static int skt_stream_notify(lua_State *L) {
     return 1;
 }
 
+// by default queues will fill on outgoing connections
+// enve if the connection has not completed. This can
+// lead to lost messages. If this option is set to 1
+// messages shall be queued only to completed connections.
+static int skt_immediate(lua_State *L) {
+    void *skt = checkskt(L);
+    int swift = lua_toboolean(L, 2);
+    size_t len = sizeof(swift);
+
+    int rc = zmq_setsockopt(skt, ZMQ_IMMEDIATE, &swift, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting immediate flag for socket, %s!", zmq_strerror( errno ));
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static int skt_events(lua_State *L) {
     void *skt = checkskt(L);
     int flag = ZMQ_POLLIN;
@@ -762,6 +805,28 @@ static int skt_monitor(lua_State *L) {
 	return 2;
     }
 
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// set the linger period which determines how long pending
+// messages which have yet to be sent to a peer shall linger
+// in memory after a socket is disconnected or closed.
+// a default value of -1 specifies an infinite linger period.
+// a value of 0 specifies no linger period.
+// positive values specify an upper bound for the linger
+// period in milliseconds.
+static int skt_linger(lua_State *L) {
+    void *skt = checkskt(L);
+    int msecs = luaL_checkinteger(L, 2);
+    size_t len = sizeof(msecs);
+
+    int rc = zmq_setsockopt(skt, ZMQ_IMMEDIATE, &msecs, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting linger period for socket, %s!", zmq_strerror( errno ));
+	return 2;
+    }
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -853,12 +918,11 @@ static const struct luaL_Reg skt_meths[] = {
     {"unbind",	   skt_unbind},
     {"connect",	   skt_connect},
     {"disconnect", skt_disconnect},
+    {"linger",     skt_linger},
     {"send_msg",   skt_send_msg},
     {"send_msgs",  skt_send_mult_msg},
     {"recv_msg",   skt_recv_msg},
     {"recv_msgs",  skt_recv_mult_msg},
-    {"set_id",	   skt_set_id},
-    {"set_rid",	   skt_set_rid},
     {"events",	   skt_events},
     {"monitor",    skt_monitor},
     {"curve", 	   skt_curve_server},
