@@ -13,7 +13,7 @@ local exec	= os.execute
 
 local HOME	= require'carlos.ferre'.HOME
 local APP	= require'carlos.ferre'.APP
-local DEST	= HOME .. '/ventas/json/version.json'
+local DEST	= HOME .. '/json/version.json' -- /ventas
 
 local print	= print
 
