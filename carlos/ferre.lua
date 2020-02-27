@@ -45,8 +45,6 @@ local QUERY	   = 'SELECT * FROM updates %s'
 -- Local function definitions --
 --------------------------------
 --
-local function tofruit( fruit, m ) return format('%s %s', fruit, m) end
-
 local function hex(h) return char(tonumber(h, 16)) end
 
 local function aspath(s) return format('%s/db/%s.db', env'HOME' , s) end
@@ -124,6 +122,7 @@ end
 
 local function send(srv, id, msg) return pcall(function() return srv:send_msgs{id, msg} end) end
 
+local function tofruit( fruit, m ) return format('%s %s', fruit, m) end
 
 --------------------------------
 -- Public function definitions --
@@ -213,10 +212,13 @@ end
 function M.cache(ps)
     local MM = {}
     local CACHE = {karl=ps}
+    local function snd2fruit(fruit) return function(m) return tofruit(fruit, m) end end
 
     function MM.store(pid, msg) CACHE[pid] = msg end
 
     function MM.delete( pid ) CACHE[pid] = nil end
+
+    function MM.cache(fruit) return reduce(keys(CACHE), fd.map(snd2fruit(fruit)), fd.into, {}) end
 
     function MM.sndkch(msgr, fruit) reduce(keys(CACHE), function(m) msgr:send_msg(tofruit(fruit, m)) end) end
 

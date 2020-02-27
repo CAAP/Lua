@@ -21,10 +21,12 @@ _ENV = nil -- or M
 --------------------------------
 --
 
+-- XXX change fruit for a random STRING
 local function dump(cmd, frt, uid)
     exec(format('%s/dump-feed.lua %s %s %s', APP, cmd, frt, uid))
 end
 
+-- XXX change fruit for a random STRING
 local function sndmsg( cmd, fruit)
     return format('%s %s %s-feed.json', fruit, cmd, fruit)
 end
@@ -52,7 +54,6 @@ local function switch( msg, msgr )
     end
 
     print(msg, '\n')
-    ::FIN::
 
 end
 

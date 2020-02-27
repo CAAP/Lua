@@ -31,34 +31,34 @@ local function update(pid, cmd, msg)
     else p[cmd] = '%s ' .. msg end -- add fruit
 end
 
-local function switch( msg )
+local function switch( msg, msgr )
 
     local cmd = msg:match'%a+'
     if cmd == 'CACHE' then
 	local fruit = msg:match'%s(%a+)'
-	return PINS.cache( fruit ) -- returns a table
+	PINS.sndkch( msgr, fruit )
+	print('tabs:\nCACHE sent to', fruit, '\n')
+	goto FIN
     end
     local pid = msg:match'pid=(%d+)'
     if cmd == 'pins' then
 	PINS.store(pid, msg)
-	return 'OK'
+	msgr:send_msg( msg )
     elseif cmd == 'login' then
 	local fruit = msg:match'fruit=(%a+)'
 	local ft = FRUITS[pid]
-	local ret = {}
-	if ft and ft ~= fruit then ret[1] = format('%s logout pid=%d', ft, pid) end
+	if ft and ft ~= fruit then msgr:send_msg(format('%s logout pid=%d', ft, pid)) end
 	FRUITS[pid] = fruit
 	if PIDS[pid] then
-	    fd.reduce(fd.keys(PIDS[pid]), fd.map(function(m) return format(m, fruit) end), fd.into, ret)
+	    fd.reduce(fd.keys(PIDS[pid]), function(m) msgr:send_msg(format(m, fruit)) end)
 	end
-	return ret -- returns a table
     else -- tabs, delete, msgs
 	update(pid, cmd, msg)
 	local ft = FRUITS[pid]
-	if cmd == 'msgs' and ft then return format('%s %s', ft, msg) end
+	if cmd == 'msgs' and ft then msgr:send_msg(format('%s %s', ft, msg)) end
     end
---    print(msg, '\n')
---    ::FIN::
+    print(msg, '\n')
+    ::FIN::
 
 end
 

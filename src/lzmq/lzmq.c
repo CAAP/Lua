@@ -126,6 +126,7 @@ static int skt_unsubscribe(lua_State *L);
 static int skt_set_rid(lua_State *L);
 static int skt_stream_notify(lua_State *L);
 static int skt_immediate(lua_State *L);
+static int skt_mandatory(lua_State *L);
 static int skt_set_id(lua_State *L);
 
 static int new_socket(lua_State *L) {
@@ -153,6 +154,13 @@ static int new_socket(lua_State *L) {
 	lua_setfield(L, -2, "subscribe");
 	lua_pushcclosure(L, &skt_unsubscribe, 0);
 	lua_setfield(L, -2, "unsubscribe");
+	lua_pop(L, 1); // pop metatable
+    }
+
+    if(type == ZMQ_ROUTER) {
+	luaL_getmetatable(L, "caap.zmq.socket");
+	lua_pushcclosure(L, &skt_mandatory, 0);
+	lua_setfield(L, -2, "mandatory");
 	lua_pop(L, 1); // pop metatable
     }
 
@@ -769,6 +777,24 @@ static int skt_immediate(lua_State *L) {
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: setting immediate flag for socket, %s!", zmq_strerror( errno ));
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// when an unroutable message is encountered, a value of 0 (default)
+// discards the message silently, a value of 1 returns a EHOSTUNREACH
+// if the message cannot be routed or EAGAIN if the SNDHWM is reached.
+static int skt_mandatory(lua_State *L) {
+    void *skt = checkskt(L);
+    int swift = lua_toboolean(L, 2);
+    size_t len = sizeof(swift);
+
+    int rc = zmq_setsockopt(skt, ZMQ_ROUTER_MANDATORY, &swift, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting mandatory flag for socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
