@@ -611,19 +611,22 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	lua_pushfstring(L, "ERROR: receiving message from a socket failed, %s!", zmq_strerror( errno ));
 	return 2;
     }
-    if (rc > 0) { // *IO*
+    if (rc > 0) { // *IO* - number of bytes in the message
 	size_t len = zmq_msg_size( &msg );
 	rc = strlen( lua_pushlstring(L, zmq_msg_data( &msg ), len) );
-	if ((rc != len) && (len > 2)) {
-	    uint8_t *data = (uint8_t *)zmq_msg_data( &msg );
+	if ((rc != len) && (len > 2)) { // mismatch type: char vs. uint8
+	    lua_pushnil(L);
+/*		 XXX XXX XXX
+	    uint8_t *data = (uint8_t *)zmq_msg_data( &msg ); // XXX should I pop last value?
 	    const char* mev = skt_transport_events(*(uint16_t *)data);
 	    if (strcmp(mev, "unknown") == 0)
 		lua_pushlstring(L, (const char *)data, len);
 	    else
 		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 2));
+*/
 	}
     }
-    else
+    else // empty message ;(
 	lua_pushnil(L);
     rc = zmq_msg_close( &msg );
     if (rc == -1) {
@@ -637,20 +640,23 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 static int mult_part_msg(lua_State *L) {
     int nowait = lua_toboolean(L, lua_upvalueindex(1));
     void *skt = checkskt(L);	   // state
-    int cnt = lua_tointeger(L, 2); // counter
-    if (cnt > 0 && lua_toboolean(L, 3) == 0) // NO more msg's in queue
+    int flag = lua_toboolean(L, 2); // MORE_FLAG
+
+    if (!flag)
 	return 0;
-    lua_pushinteger(L, ++cnt);	   // increment counter
+
     lua_pushboolean(L, recv_msg(L, skt, nowait)); // msg & 'more'
-    return 3;
+    lua_rotate(L, 3, 1); // 'more' & msg
+    return 2;
 }
 
 static int skt_recv_mult_msg(lua_State *L) {
+    void *skt = checkskt(L);
     int nowait = lua_toboolean(L, 2); // NOWAIT flag
     lua_pushboolean(L, nowait);
     lua_pushcclosure(L, &mult_part_msg, 1);	// iter function + upvalue(NOWAIT flag)
     lua_pushvalue(L, 1);			// state := socket
-    lua_pushinteger(L, 0);			// initialize counter to zero
+    lua_pushboolean(L, 1);			// initialize MORE_FLAG to TRUE
     return 3;
 }
 
