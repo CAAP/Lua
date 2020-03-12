@@ -5,7 +5,9 @@ local fd	= require'carlos.fold'
 
 local cache	= require'carlos.ferre'.cache
 
-local format	= require'string'.format
+local format	= string.format
+local insert	= table.insert
+local concat	= table.concat
 
 local print	= print
 
@@ -15,50 +17,57 @@ _ENV = nil -- or M
 -- Local Variables for module-only access
 --
 local PINS	 = cache'Hi PINS'
+local TABS	 = cache'Hi TABS'
+TABS.tabs = TABS.store
 
-local PIDS	 = {}
 local FRUITS	 = {}
 
 --------------------------------
 -- Local function definitions --
 --------------------------------
 --
- -- cmds: tabs, delete, msgs
-local function update(pid, cmd, msg)
-    if not PIDS[pid] then PIDS[pid] = {} end
-    local p = PIDS[pid]
-    if cmd == 'delete' and p.tabs then p.tabs = nil
-    else p[cmd] = '%s ' .. msg end -- add fruit
+
+local function join(w, fruit)
+    if w then
+	w[1] = format('%s %s', fruit, w[1])
+	w[#w] = w[#w]..'\n\n'
+	return concat(w, '&')
+    end
 end
 
-local function switch( msg )
-
-    local cmd = msg:match'%a+'
+-- CACHE sent is the PINS stored for each employee
+-- tabs are only sent once a login succeeds
+local function switch( cmd, pid, msg )
     if cmd == 'CACHE' then
 	local fruit = msg:match'%s(%a+)'
 	return PINS.cache( fruit ) -- returns a table
     end
-    local pid = msg:match'pid=(%d+)'
-    if cmd == 'pins' then
+
+    local ft = FRUITS[pid]
+
+    -- short-circuit & re-route the message
+    if cmd == 'msgs' and ft then
+	return format('%s %s', ft, msg)
+
+    -- store new PIN
+    elseif cmd == 'pins' then
 	PINS.store(pid, msg)
-	return 'OK'
+	return msg
+
     elseif cmd == 'login' then
 	local fruit = msg:match'fruit=(%a+)'
-	local ft = FRUITS[pid]
 	local ret = {}
+	-- guard against double login by sending message to first session & closing it
 	if ft and ft ~= fruit then ret[1] = format('%s logout pid=%d', ft, pid) end
-	FRUITS[pid] = fruit
-	if PIDS[pid] then
-	    fd.reduce(fd.keys(PIDS[pid]), fd.map(function(m) return format(m, fruit) end), fd.into, ret)
-	end
-	return ret -- returns a table
-    else -- tabs, delete, msgs
-	update(pid, cmd, msg)
-	local ft = FRUITS[pid]
-	if cmd == 'msgs' and ft then return format('%s %s', ft, msg) end
+	FRUITS[pid] = fruit -- new session opened & saved
+	ret[#ret+1] = join(TABS.has(pid), fruit) -- tabs data, if any
+	return ret -- returns a table | possibly empty
+
+    else -- tabs, delete
+	TABS[cmd](pid, msg)
+	return 'OK'
+
     end
---    print(msg, '\n')
---    ::FIN::
 
 end
 

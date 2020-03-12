@@ -17,7 +17,8 @@ local post = 'POST %s HTTP/1.1\r\nHost: %s\r'
 local protocol = 'HTTP/1.1 %s\r'
 local access = 'Access-Control-Allow-Origin: %s\r\nAccess-Control-Allow-Methods: GET\r\n\r'
 local auth = 'Authorization: %s\r'
-local content = { text='Content-Type: text/plain\r',
+local content = { text='Content-Type: text/plain\r\nCache-Control: no-cache\r',
+ -- Content-Type: text/plain\r
 		  soap='Content-Type: application/soap+xml; charset=utf-8\r',
 		  xml='Content-Type: text/xml; charset=utf-8\r',
 		  urlencoded='Content-Type: application/x-www-form-urlencoded\r',

@@ -533,7 +533,7 @@ static int skt_send_mult_msg(lua_State *L) {
     int i, N = luaL_len(L, 2);
     for (i=1; i<N; i++) {
 	lua_rawgeti(L, 2, i);
-	if (-1 == send_msg(L, skt, 3, flags)) {
+	if (-1 == send_msg(L, skt, -1, flags)) {
 	    lua_pushnil(L);
 	    lua_pushfstring(L, "ERROR: message could not be sent, %s!", zmq_strerror( errno ));
 	    return 2;
@@ -541,7 +541,7 @@ static int skt_send_mult_msg(lua_State *L) {
 	lua_pop(L, 1);
     }
     lua_rawgeti(L, 2, N);
-    if (-1 == send_msg(L, skt, 3, nowait)) {
+    if (-1 == send_msg(L, skt, -1, nowait)) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: message could not be sent, %s!", zmq_strerror( errno ));
 	return 2;
@@ -615,15 +615,12 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	size_t len = zmq_msg_size( &msg );
 	rc = strlen( lua_pushlstring(L, zmq_msg_data( &msg ), len) );
 	if ((rc != len) && (len > 2)) { // mismatch type: char vs. uint8
-	    lua_pushnil(L);
-/*		 XXX XXX XXX
-	    uint8_t *data = (uint8_t *)zmq_msg_data( &msg ); // XXX should I pop last value?
-	    const char* mev = skt_transport_events(*(uint16_t *)data);
+	    uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
+	    const char* mev = skt_transport_events( *data );
 	    if (strcmp(mev, "unknown") == 0)
 		lua_pushlstring(L, (const char *)data, len);
 	    else
-		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 2));
-*/
+		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 1));
 	}
     }
     else // empty message ;(
@@ -783,6 +780,23 @@ static int skt_immediate(lua_State *L) {
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: setting immediate flag for socket, %s!", zmq_strerror( errno ));
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// socket option KEEPALIVE where supported by the OS, the default
+// value of -1 means to skip any overrides and leave it to OS default
+static int skt_keep_alive(lua_State *L) {
+    void *skt = checkskt(L);
+    int swift = lua_toboolean(L, 2); // 1 or 0
+    size_t len = sizeof(swift);
+
+    int rc = zmq_setsockopt(skt, ZMQ_TCP_KEEPALIVE, &swift, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting keepalive flag for socket, %s!", zmq_strerror( errno ));
 	return 2;
     }
     lua_pushboolean(L, 1);
@@ -957,6 +971,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"recv_msgs",  skt_recv_mult_msg},
     {"events",	   skt_events},
     {"monitor",    skt_monitor},
+    {"alive",	   skt_keep_alive},
     {"curve", 	   skt_curve_server},
     {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},

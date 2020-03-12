@@ -23,7 +23,7 @@ _ENV = nil -- or M
 -- Local Variables for module-only access
 --
 local CACHE	 = cache'Hi VERS'
-local VERS	 = ''
+local MEM	 = {}
 
 --------------------------------
 -- Local function definitions --
@@ -37,40 +37,40 @@ end
 
 local function dumpPRICE() exec(format('%s/dump-price.lua', APP)) end
 
-local function getVersion()
-    local f = popen(format('%s/dump-vers.lua', APP)) -- think about just reading a file instead XXX
-    local v = f:read('l'):gsub('%s+%d$', '') -- like after changes in dbweek write the file directly XXX
-    f:close()
-
-    if v ~= VERS then
-	VERS = v
+local function setVersion(v)
+    if v == CACHE.has('vers') then
+	return v
+    else
 	dump(DEST, v)
-	dumpPRICE() -- XXX send a message to dbferre instead or the app should've done it already
-	CACHE.store('vers', format('version %s', v))
+	CACHE.store('vers', 'version ' .. v)
+	print( v )
     end
-
-    return v
 end
 
-local function switch( msg )
+local function switch( cmd, msg )
 
-    local cmd = msg:match'%a+'
     if cmd == 'CACHE' then
 	local fruit = msg:match'%s(%a+)'
 	return CACHE.cache( fruit ) -- returns a table
     end
 
     if cmd == 'version' then
-	return getVersion()
+	return CACHE.has('vers')
 
-    elseif cmd == 'adjust' then
-	local cmd, o = decode(msg) -- o: fruit, week, vers
-	adjust(o.fruit, o.week, o.vers)
-	return format('%s adjust %s.json', o.fruit, o.fruit)
+ -- notification from 'weekdb' of an update returns a 'version' msg
+    elseif cmd == 'update' then
+	return 'version ' .. setVersion(msg[2])
+
     end
 
 end
 
-print( getVersion() )
+do
+    local f = popen(format('%s/dump-vers.lua', APP))
+    local v = f:read('l'):gsub('%s+%d$', '')
+    f:close()
+    setVersion(v)
+end
+
 
 return switch

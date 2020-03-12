@@ -220,7 +220,7 @@ function M.cache(ps)
 
     function MM.cache(fruit) return reduce(keys(CACHE), fd.map(snd2fruit(fruit)), fd.into, {}) end
 
-    function MM.sndkch(msgr, fruit) reduce(keys(CACHE), function(m) msgr:send_msg(tofruit(fruit, m)) end) end
+--    function MM.sndkch(msgr, fruit) reduce(keys(CACHE), function(m) msgr:send_msg(tofruit(fruit, m)) end) end
 
     function MM.has( pid ) return CACHE[pid] end
 
