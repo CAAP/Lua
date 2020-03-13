@@ -38,12 +38,11 @@ end
 local function dumpPRICE() exec(format('%s/dump-price.lua', APP)) end
 
 local function setVersion(v)
-    if v == CACHE.has('vers') then
-	return v
-    else
+    if v == CACHE.has('vers') then return v else
 	dump(DEST, v)
 	CACHE.store('vers', 'version ' .. v)
 	print( v )
+	return v
     end
 end
 
