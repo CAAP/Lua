@@ -6,7 +6,7 @@
 
 BASED="/var/www/htdocs/app-ferre/logs"
 
-for f in $(ls $HOME/app-ferre/03-ferre-*.lua) ;do
+for f in $(ls $HOME/app-ferre/04-ferre-*.lua) ;do
 	cmd="$(basename $f)"
 	cmd="$BASED/${cmd#*ferre-}"
 	logo="${cmd%.lua}.out"
