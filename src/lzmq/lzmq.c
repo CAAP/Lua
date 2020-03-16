@@ -614,17 +614,10 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
     if (rc > 0) { // *IO* - number of bytes in the message
 	size_t len = zmq_msg_size( &msg );
 	rc = strlen( lua_pushlstring(L, zmq_msg_data( &msg ), len) );
-<<<<<<< HEAD
-	if ((rc != len) && (len > 2)) { // mismatch type: char vs. uint8
-	    uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
-	    const char* mev = skt_transport_events( *data );
-=======
 	if ((rc != len) && (len > 2)) { // mismatch type: char vs. uint16
 	    lua_pop(L, 1); // last message
 	    uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
-//	    uint8_t *data = (uint8_t *)zmq_msg_data( &msg ); // XXX should I pop last value?
 	    const char* mev = skt_transport_events(*data);
->>>>>>> 0812752b8cb7cce1ef11a72d4dce4ab8177fd99d
 	    if (strcmp(mev, "unknown") == 0)
 		lua_pushlstring(L, (const char *)data, len);
 	    else
