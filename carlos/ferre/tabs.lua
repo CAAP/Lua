@@ -8,6 +8,7 @@ local cache	= require'carlos.ferre'.cache
 local format	= string.format
 local insert	= table.insert
 local concat	= table.concat
+local unpack	= table.unpack
 
 local print	= print
 
@@ -29,9 +30,10 @@ local FRUITS	 = {}
 
 local function join(w, fruit)
     if w then
-	w[1] = format('%s %s', fruit, w[1])
-	w[#w] = w[#w]..'\n\n'
-	return concat(w, '&')
+	local u = { unpack(w) }
+	u[1] = format('%s %s', fruit, w[1])
+	u[#u] = w[#w]..'\n\n'
+	return concat(u, '&query=')
     end
 end
 
