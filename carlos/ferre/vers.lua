@@ -23,7 +23,6 @@ _ENV = nil -- or M
 -- Local Variables for module-only access
 --
 local CACHE	 = cache'Hi VERS'
-local MEM	 = {}
 
 --------------------------------
 -- Local function definitions --

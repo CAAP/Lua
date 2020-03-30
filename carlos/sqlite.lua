@@ -88,8 +88,9 @@ local function connect( dbname )
     end
 
     function MM.header( tbname )
- 	local schema = fd.first( rows( mquery ), function(x) return x.name:find( tbname ) end )
+ 	local schema = fd.first( rows( mquery ), function(x) return x.name:match( tbname ) end )
 	assert( schema, 'Table not found.' )
+--	return schema
 	return header( schema.sql )
     end
 
@@ -116,6 +117,7 @@ local function connect( dbname )
     end
 
     -- IN MEMORY DATABASES -- XXX correct so do not need to check for this!!!
+    -- should be done in lsql.c
     if dbname == ":inmemory:" or dbname == ":temporary:" then
 	function MM.backup( dbpath, steps )
 	    return lsql.backup(conn, dbpath, steps)
