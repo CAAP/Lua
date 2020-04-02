@@ -31,7 +31,7 @@ local QUID	 = 'SELECT uid, SUBSTR(uid, 12, 5) time, SUM(qty) count, ROUND(SUM(to
 --------------------------------
 --
 
-local function route( fruit ) return function(m) return format('%s %s', fruit, m) end end
+local function route( fruit ) return function(m) return format('%s feed %s', fruit, m) end end
 
 local function store( msg )
 --    if #MEM > 500 then MEM = {} end
@@ -41,25 +41,11 @@ end
 
 local function switch( cmd, msg )
 
-    if cmd == 'CACHE' then
-	local fruit = msg:match'%a+'
+    if cmd == 'feed' and #MEM > 0 then
+	local fruit = msg:match'%s(%a+)' -- '%a+'
 	return reduce(MEM, map( route(fruit) ), into, {})
     end
 
-    if cmd == 'feed' then
-	msg = msg[2]
-	if msg:match'uid' then return store( msg ) else
-	return MEM end
-    end
-
 end
-
-do
-    local TODAY = newUID():match'([%d%-]+)T' .. '%'
-    local WEEK = assert( dbconn( asweek( now() ) ) )
-    local qry = format(QUID, 'LIKE', TODAY)
-    reduce(WEEK.query(qry), map(asJSON), into, MEM)
-end
-
 
 return switch

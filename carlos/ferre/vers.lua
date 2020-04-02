@@ -30,6 +30,7 @@ local CACHE	 = cache'Hi VERS'
 --
 -- XXX store week & vers already received so info doesn't need to be generated once again
 -- find all updates that need to be sent to a specific peer & send them all
+
 local function adjust(fruit, week, vers)
     exec(format('%s/dump-stream.lua %s %s %d', APP, fruit, week, vers))
 end
