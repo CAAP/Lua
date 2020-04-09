@@ -15,6 +15,8 @@ local HOME	= require'carlos.ferre'.HOME
 local APP	= require'carlos.ferre'.APP
 local DEST	= HOME .. '/json/version.json' -- /ventas
 
+local CACHE	= cache'Hi vers'
+
 local print	= print
 
 -- No more external access after this point
