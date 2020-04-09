@@ -21,11 +21,6 @@ local print	= print
 _ENV = nil -- or M
 
 -- Local Variables for module-only access
---
-local CACHE	 = cache'Hi VERS'
-
---------------------------------
--- Local function definitions --
 --------------------------------
 --
 -- XXX store week & vers already received so info doesn't need to be generated once again
@@ -39,7 +34,6 @@ local function dumpPRICE() exec(format('%s/dump-price.lua', APP)) end
 
 local function setVersion(v)
     if v == CACHE.has('vers') then return v else
-	dump(DEST, v)
 	CACHE.store('vers', 'version ' .. v)
 	print( v )
 	return v
@@ -58,17 +52,19 @@ local function switch( cmd, msg )
 
  -- notification from 'weekdb' of an update returns a 'version' msg
     elseif cmd == 'update' then
-	return 'version ' .. setVersion(msg[2])
+	return 'version ' .. setVersion(msg)
 
     end
 
 end
 
 do
+    dumpPRICE()
     local f = popen(format('%s/dump-vers.lua', APP))
     local v = f:read('l'):gsub('%s+%d$', '')
     f:close()
     setVersion(v)
+    dump(DEST, v)
 end
 
 
