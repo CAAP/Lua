@@ -46,7 +46,7 @@ function M.ticket(head, data)
 	centrado'Benito Ju\225rez 1-C, Ocotl\225n, Oaxaca',
 	centrado'Tel. (951) 57-10076',
 	'',
-	'',
+	' ',
 	campos{'CLAVE', 'CNT', '%', 'PRECIO', 'TOTAL'},
 	''
     }
