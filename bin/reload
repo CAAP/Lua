@@ -1,0 +1,10 @@
+#!/bin/ksh
+
+. $HOME/.kshrc
+
+### actual/
+
+pkill -f "ferre-server"
+
+$lua "$HOME/ledger-ferre/03-ferre-server.lua" > "$HOME/logs/server.out" 2>"$HOME/logs/server.err" &
+
