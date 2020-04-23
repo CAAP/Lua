@@ -822,6 +822,20 @@ static int skt_mandatory(lua_State *L) {
     return 1;
 }
 
+static int skt_fd(lua_State *L) {
+    void *skt = checkskt(L);
+    int fd = 0;
+    size_t len = sizeof(fd);
+    if (zmq_getsockopt(skt, ZMQ_FD, &fd, &len) == 0) {
+	lua_pushinteger(L, fd);
+	return 1;
+    } else {
+	lua_pushnil(L);
+    	lua_pushfstring(L, "ERROR: getting sockopt EVENTS for socket, %s!", zmq_strerror( errno ));
+	return 2;
+    }
+}
+
 static int skt_events(lua_State *L) {
     void *skt = checkskt(L);
     int flag = ZMQ_POLLIN;
@@ -970,6 +984,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"send_msgs",  skt_send_mult_msg},
     {"recv_msg",   skt_recv_msg},
     {"recv_msgs",  skt_recv_mult_msg},
+    {"fd", 	   skt_fd},
     {"events",	   skt_events},
     {"monitor",    skt_monitor},
     {"alive",	   skt_keep_alive},
