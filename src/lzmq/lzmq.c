@@ -102,6 +102,19 @@ extern int errno;
 // An an "application" that reads the message and acts on it. The
 // ROUTER must know the format of the 'reply envelope' it's being sent.
 
+static const char charset[] = "abcdefghijklmnopqrstuvwxyz"; 
+static const size_t len_chars = sizeof(charset);
+
+static int new_identity(lua_State *L) {
+    char identity[10];
+    int len = (int)(len_chars - 1);
+
+    for (int i=0; i<9;)
+	identity[i++] = charset[ rand() % len ];
+
+    lua_pushstring(L, identity);
+    return 1;
+}
 
 //
 // CONTEXT
@@ -976,6 +989,7 @@ static const struct luaL_Reg zmq_funcs[] = {
     {"proxy",   new_proxy},
     {"pollin",  new_poll_in},
     {"keypair", new_keypair},
+    {"pid",	new_identity},
     {NULL, 	NULL}
 };
 
