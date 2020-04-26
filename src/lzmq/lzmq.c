@@ -637,16 +637,12 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	lua_getuservalue(L, 1);
 	int t = lua_tointeger(L, -1); lua_pop(L, 1);
 	size_t len = zmq_msg_size( &msg );
-	rc = strlen( lua_pushlstring(L, zmq_msg_data( &msg ), len) );
-	if ((rc != len) && (len > 2)) {
+	rc = strlen( lua_pushlstring(L, (const char *)zmq_msg_data( &msg ), len) );
+	if ((rc != len) && (t == ZMQ_PAIR)) {
 	    lua_pop(L, 1);
-	    if (t == ZMQ_PAIR) {
-		uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
-		const char* mev = skt_transport_events(*data);
-		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 1));
-	    } else {
-		lua_pushlstring(L, (const char *)zmq_msg_data( &msg ), len);
-	    }
+	    uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
+	    const char* mev = skt_transport_events(*data);
+	    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 1));
 	}
     } else // empty message ;(
 	lua_pushnil(L);
