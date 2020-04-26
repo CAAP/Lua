@@ -133,11 +133,13 @@ static int new_socket(lua_State *L) {
     void *ctx = checkctx(L);
     const char* ttype = luaL_checkstring(L, 2);
 
+    void **pskt = (void **)lua_newuserdata(L, sizeof(void *));
+    //
     lua_getfield(L, lua_upvalueindex(1), ttype);
     int type = lua_tointeger(L, -1);
-    lua_pop(L, 1);
-
-    void **pskt = (void **)lua_newuserdata(L, sizeof(void *));
+//    lua_pop(L, 1);
+    lua_setuservalue(L, -2);
+    //
     luaL_getmetatable(L, "caap.zmq.socket");
     lua_setmetatable(L, -2);
 
@@ -413,9 +415,27 @@ static int new_proxy(lua_State *L) {
 // a CONNECT. We create and bind one socket and start the child threads, which create and
 // connect the other sockets.
 
+const char* skt_label(int t) {
+    switch(t) {
+	case ZMQ_PAIR:   return "PAIR";
+	case ZMQ_PUB:    return "PUB";
+	case ZMQ_SUB:    return "SUB";
+	case ZMQ_REQ:    return "REQ";
+	case ZMQ_REP:    return "REP";
+	case ZMQ_PULL:   return "PULL";
+	case ZMQ_PUSH:   return "PUSH";
+	case ZMQ_XPUB:   return "XPUB";
+	case ZMQ_XSUB:   return "XSUB";
+	case ZMQ_DEALER: return "DEALER";
+	case ZMQ_ROUTER: return "ROUTER";
+	case ZMQ_STREAM: return "STREAM";
+	default: return NULL;
+    }
+}
 
 static int skt_asstr(lua_State *L) {
-    lua_pushstring(L, "zmq{Active Socket}");
+    lua_getuservalue(L, 1);
+    lua_pushfstring(L, "zmq{Socket: %s}", skt_label(lua_tointeger(L, 2)));
     return 1;
 }
 
@@ -514,9 +534,11 @@ static int skt_disconnect (lua_State *L) {
 
 int send_msg(lua_State *L, void *skt, int idx, int flags) {
     size_t len = 0;
-    const char *data = luaL_checklstring(L, idx, &len);
     zmq_msg_t msg;
-    int rc = zmq_msg_init_data( &msg, len==0 ? 0 :(void *)data, len, NULL, NULL ); // XXX send 0-length data
+
+    const char *data = luaL_checklstring(L, idx, &len);
+
+    int rc = zmq_msg_init_data( &msg, len==0 ? 0 : (void *)data, len, NULL, NULL ); // XXX send 0-length data
     if (rc == -1)
 	return rc;
     return zmq_msg_send( &msg, skt, flags ); // either error or success
@@ -612,19 +634,21 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	return 2;
     }
     if (rc > 0) { // *IO* - number of bytes in the message
+	lua_getuservalue(L, 1);
+	int t = lua_tointeger(L, -1); lua_pop(L, 1);
 	size_t len = zmq_msg_size( &msg );
 	rc = strlen( lua_pushlstring(L, zmq_msg_data( &msg ), len) );
-	if ((rc != len) && (len > 2)) { // mismatch type: char vs. uint16
-	    lua_pop(L, 1); // last message
-	    uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
-	    const char* mev = skt_transport_events(*data);
-	    if (strcmp(mev, "unknown") == 0)
-		lua_pushlstring(L, (const char *)data, len);
-	    else
+	if ((rc != len) && (len > 2)) {
+	    lua_pop(L, 1);
+	    if (t == ZMQ_PAIR) {
+		uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
+		const char* mev = skt_transport_events(*data);
 		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 1));
+	    } else {
+		lua_pushlstring(L, (const char *)zmq_msg_data( &msg ), len);
+	    }
 	}
-    }
-    else // empty message ;(
+    } else // empty message ;(
 	lua_pushnil(L);
     rc = zmq_msg_close( &msg );
     if (rc == -1) {
