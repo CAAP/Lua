@@ -4,7 +4,6 @@
 
 ### actual/
 
-pkill -f "ferre-server"
+pkill -f "app-ferre"
 
-$lua "$HOME/ledger-ferre/03-ferre-server.lua" > "$HOME/logs/server.out" 2>"$HOME/logs/server.err" &
-
+app-ferre
