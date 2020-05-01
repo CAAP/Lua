@@ -6,7 +6,7 @@
 
 /*
     int unveil(const char *path, const char *flags);
-*/
+
 static int unveil_raw(lua_State *L) {
     const char *path = luaL_checkstring(L, 1);
     const char *flags = luaL_checkstring(L, 2);
@@ -21,9 +21,9 @@ static int unveil_raw(lua_State *L) {
     }
 }
 
-/*
+
     unsigned int sleep(unsigned int);
-*/
+
 static int sleep_raw(lua_State *L) {
     const unsigned int secs = luaL_checkinteger(L, 1);
 
@@ -37,14 +37,20 @@ static int sleep_raw(lua_State *L) {
     }
 }
 
-/*
     int pledge(const char *promises, const char *execpromises);
 */
 
+// -1 means error, 0, 1, ... means success of some kind
+static int does_file_exists(lua_State *L) {
+    const char *path = luaL_checkstring(L, 1);
+    lua_pushboolean(L, access(path, F_OK) != -1);
+    return 1;
+}
 
 static const struct luaL_Reg bsd_funcs[] = {
-    {"unveil", unveil_raw},
-    {"sleep", sleep_raw},
+//    {"unveil", unveil_raw},
+//    {"sleep", sleep_raw},
+    {"file_exists", does_file_exists},
     {NULL, NULL}
 };
 

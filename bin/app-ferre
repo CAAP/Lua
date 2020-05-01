@@ -4,7 +4,7 @@
 
 ### actual/
 
-BASED="/var/www/htdocs/app-ferre/logs"
+BASED="$APP/logs"
 
 for f in $(ls $HOME/app-ferre/04-ferre-*.lua) ;do
 	cmd="$(basename $f)"

@@ -4,6 +4,6 @@
 
 ### actual/
 
-BASED="/var/www/htdocs/app-ferre/logs"
+BASED="$APP/logs"
 
 $lua "$HOME/app-ferre/05-ferre-vultr.lua" > "$BASED/vultr.out" 2>"$BASED/vultr.err"

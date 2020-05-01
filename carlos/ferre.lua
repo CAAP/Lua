@@ -27,14 +27,13 @@ local pairs	   = pairs
 local concat	   = table.concat
 
 local FRUITS	   = {'apple', 'apricot', 'avocado', 'banana', 'berry', 'cherry', 'coconut', 'cucumber', 'fig', 'grape', 'raisin', 'guava', 'pepper', 'corn', 'plum', 'kiwi', 'lemon', 'lime', 'lychee', 'mango', 'melon', 'olive', 'orange', 'durian', 'longan', 'pea', 'peach', 'pear', 'prune', 'pine', 'pomelo', 'pome', 'quince', 'rhubarb', 'mamey', 'soursop', 'granate', 'sapote'}
- 
 
 -- No more external access after this point
 _ENV = nil -- or M
 
 -- Local Variables for module-only access
 --
-local HOME	   = '/var/www/htdocs/app-ferre'
+local HOME	   = env'APP'
 local ROOT	   = HOME .. '/ventas/json'
 local DEST	   = ROOT .. '/version.json'
 

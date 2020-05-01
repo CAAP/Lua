@@ -37,7 +37,7 @@ local ROOT = args[3] and args[3]:gsub('/$', '') or nil
 local STEM = DIR:match'/?([^/]+)$'
 
 -- output DIR must match httpd deamon root directory
-assert(WWW:match'htdocs', 'Not a root directory for the httpd deamon')
+assert(WWW:match'htdocs' or WWW:match'nginx', 'Not a root directory for the httpd deamon')
 
 -- Uppercase letters plus underscore
 local REGEX = '([%u_]+)'
