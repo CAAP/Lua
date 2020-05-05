@@ -19,7 +19,7 @@ _ENV = nil -- or M
 --
 local PINS	 = cache'Hi PINS'
 local TABS	 = cache'Hi TABS'
-TABS.tabs = TABS.store
+--TABS.tabs = TABS.store
 
 local FRUITS	 = {}
 
@@ -27,6 +27,12 @@ local FRUITS	 = {}
 -- Local function definitions --
 --------------------------------
 --
+
+TABS.tabs = function(pid, msg)
+    local ret = TABS.has(pid)
+    if ret then fd.drop(1, msg, fd.into, ret)
+    else TABS.store(pid, msg) end
+end
 
 local function join(w, fruit)
     if w then
