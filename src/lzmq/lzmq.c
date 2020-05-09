@@ -23,6 +23,17 @@ typedef struct {
 
 extern int errno;
 
+#define zmqError(L, rc, emsg)\
+    if ((rc) == -1) {\
+	lua_pushnil(L);\
+	lua_pushfstring(L, "%s: %s\n", (emsg), zmq_strerror( errno ));\
+	return 2;\
+    } else {\
+	lua_pushboolean(L, 1);\
+	return 1;\
+    }
+
+
 // ZeroMQ patterns encapsulate hard-earned experience of the best ways to
 // distribute data and work. ZeroMQ patterns are implemented by pairs of
 // sockets with matching types. The built-in core ZeroMQ patterns are:
@@ -101,20 +112,6 @@ extern int errno;
 // As a "proxy" that switches messages between front- & backend sockets.
 // An an "application" that reads the message and acts on it. The
 // ROUTER must know the format of the 'reply envelope' it's being sent.
-
-static const char charset[] = "abcdefghijklmnopqrstuvwxyz"; 
-static const size_t len_chars = sizeof(charset);
-
-static int new_identity(lua_State *L) {
-    char identity[10];
-    int len = (int)(len_chars - 1);
-
-    for (int i=0; i<9;)
-	identity[i++] = charset[ rand() % len ];
-
-    lua_pushstring(L, identity);
-    return 1;
-}
 
 //
 // CONTEXT
@@ -319,14 +316,7 @@ static int key_client(lua_State *L) {
     rc = zmq_setsockopt(skt, ZMQ_CURVE_SECRETKEY, cert->secret_key, len);
 
     ZERROR:
-    if (rc != 0) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: unable to configure CURVE client: %s\n", zmq_strerror( errno ));
-	return 2;
-    } else {
-	lua_pushboolean(L, 1);
-	return 1;
-    }
+    zmqError(L, rc, "ERROR: unable to configure CURVE client");
 }
 
 static int key_asstr(lua_State *L) {
@@ -362,14 +352,7 @@ static int new_poll_in(lua_State *L) {
     }
 
     int rc = zmq_poll(it, N, -1);
-    if (rc == -1) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to poll event: %s\n", zmq_strerror( errno ));
-	return 2;
-    }
-    lua_pushboolean(L, 1);
-
-    return 1;
+    zmqError(L, rc, "ERROR: Unable to poll event")
 }
 
 
@@ -395,14 +378,7 @@ static int new_proxy(lua_State *L) {
     if (lua_isuserdata(L, 3))
 	capture = *(void **)luaL_checkudata(L, 3, "caap.zmq.socket");
     int rc = zmq_proxy(frontend, backend, capture);
-    if (rc == -1) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to create proxy: %s\n", zmq_strerror( errno ));
-	return 2;
-    }
-    lua_pushboolean(L, 1);
-    return 1;
-
+    zmqError(L, rc, "ERROR: Unable to create proxy")
 }
 
 //
@@ -470,13 +446,8 @@ static int skt_gc(lua_State *L) {
 static int skt_bind (lua_State *L) {
     void *skt = checkskt(L);
     const char *addr = luaL_checkstring(L, 2);
-    if (zmq_bind(skt, addr) == -1) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to bind socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
-	return 2;
-    }
-    lua_pushboolean(L, 1);
-    return 1;
+    int rc = zmq_bind(skt, addr);
+    zmqError(L, rc, "ERROR: Unable to bind socket to endpoint") // addr
 }
 
 // Unbind a socket specified by the socket
@@ -485,13 +456,8 @@ static int skt_bind (lua_State *L) {
 static int skt_unbind(lua_State *L) {
     void *skt = checkskt(L);
     const char *addr = luaL_checkstring(L, 2);
-    if (-1 == zmq_unbind(skt, addr)) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to unbind socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
-	return 2;
-    }
-    lua_pushboolean(L, 1);
-    return 1;
+    int rc = zmq_unbind(skt, addr);
+    zmqError(L, rc, "ERROR: Unable to unbind socket to endpoint") // addr
 }
 
 // Create outgoing connection from socket
@@ -500,13 +466,8 @@ static int skt_unbind(lua_State *L) {
 static int skt_connect (lua_State *L) {
     void *skt = checkskt(L);
     const char *addr = luaL_checkstring(L, 2);
-    if (zmq_connect(skt, addr) == -1) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
-	return 2;
-    }
-    lua_pushboolean(L, 1);
-    return 1;
+    int rc = zmq_connect(skt, addr);
+    zmqError(L, rc, "ERROR: Unable to connect socket to endpoint") // addr
 }
 
 // Disconnect a socket from the endpoint.
@@ -520,13 +481,8 @@ static int skt_connect (lua_State *L) {
 static int skt_disconnect (lua_State *L) {
     void *skt = checkskt(L);
     const char *addr = luaL_checkstring(L, 2);
-    if (zmq_disconnect(skt, addr) == -1) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "ERROR: Unable to connect socket to endpoint: %s: %s\n", addr, zmq_strerror( errno ));
-	return 2;
-    }
-    lua_pushboolean(L, 1);
-    return 1;
+    int rc = zmq_disconnect(skt, addr);
+    zmqError(L, rc, "ERROR: Unable to disconnect socket to endpoint") // addr
 }
 
 // Send a message part on a socket
@@ -551,10 +507,10 @@ int send_msg(lua_State *L, void *skt, int idx, int flags) {
 
     const char *data = luaL_checklstring(L, idx, &len);
 
-    int rc = zmq_msg_init_data( &msg, len==0 ? 0 : (void *)data, len, NULL, NULL ); // XXX send 0-length data
+    int rc = zmq_msg_init_data( &msg, (void *)data, len, NULL, NULL ); // XXX send 0-length data
     if (rc == -1)
 	return rc;
-    return zmq_msg_send( &msg, skt, flags ); // either error or success
+    return zmq_msg_send( &msg, skt, flags ); // either error or length of message sent
 }
 
 // sends ALL or NONE
@@ -642,9 +598,8 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
     rc = zmq_msg_init( &msg ); // always returns ZERO, no errors are defined
     rc = zmq_msg_recv(&msg, skt, nowait ? ZMQ_DONTWAIT : 0);
     if (rc == -1) {
-	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: receiving message from a socket failed, %s!", zmq_strerror( errno ));
-	return 2;
+	return rc;
     }
     if (rc > 0) { // *IO* - number of bytes in the message
 	lua_getuservalue(L, 1);
@@ -661,9 +616,8 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	lua_pushnil(L);
     rc = zmq_msg_close( &msg );
     if (rc == -1) {
-	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: message could not be closed properly, %s!", zmq_strerror( errno ));
-	return 2;
+	return rc;
     }
     return zmq_msg_more( &msg );
 }
@@ -676,13 +630,13 @@ static int mult_part_msg(lua_State *L) {
     if (!flag)
 	return 0;
 
-    lua_pushboolean(L, recv_msg(L, skt, nowait)); // msg & 'more'
+    lua_pushboolean(L, recv_msg(L, skt, nowait) == 1); // msg & 'more'
     lua_rotate(L, 3, 1); // 'more' & msg
     return 2;
 }
 
-static int skt_recv_mult_msg(lua_State *L) {
-    void *skt = checkskt(L);
+static int skt_iter_msg(lua_State *L) {
+//    void *skt = checkskt(L);
     int nowait = lua_toboolean(L, 2); // NOWAIT flag
     lua_pushboolean(L, nowait);
     lua_pushcclosure(L, &mult_part_msg, 1);	// iter function + upvalue(NOWAIT flag)
@@ -691,10 +645,21 @@ static int skt_recv_mult_msg(lua_State *L) {
     return 3;
 }
 
+
+static int skt_recv_mult_msg(lua_State *L) {
+    void *skt = checkskt(L);
+    int nowait = lua_toboolean(L, 2); // NOWAIT flag
+    lua_newtable(L); int k = 1;
+    while( recv_msg(L, skt, nowait) == 1)
+	lua_rawseti(L, -2, k++);
+    lua_rawseti(L, -2, k++);
+    return 1;
+}
+
 static int skt_recv_msg(lua_State *L) {
     void *skt = checkskt(L);
     int nowait = lua_toboolean(L, 2); // NOWAIT flag
-    lua_pushboolean(L, recv_msg(L, skt, nowait)); // msg & 'more'
+    lua_pushboolean(L, recv_msg(L, skt, nowait) == 1); // msg & 'more'
     return 2;
 }
 
@@ -989,7 +954,6 @@ static const struct luaL_Reg zmq_funcs[] = {
     {"proxy",   new_proxy},
     {"pollin",  new_poll_in},
     {"keypair", new_keypair},
-    {"pid",	new_identity},
     {NULL, 	NULL}
 };
 
@@ -1018,6 +982,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"send_msgs",  skt_send_mult_msg},
     {"recv_msg",   skt_recv_msg},
     {"recv_msgs",  skt_recv_mult_msg},
+    {"msgs",	   skt_iter_msg},
     {"fd", 	   skt_fd},
     {"events",	   skt_events},
     {"monitor",    skt_monitor},
