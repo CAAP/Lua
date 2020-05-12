@@ -18,7 +18,8 @@ typedef struct {
 } cert_t;
 
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
-#define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
+#define checkskt(L) *(void **)lua_touserdata(L, 1)
+//#define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
 #define checkkey(L) (cert_t *)luaL_checkudata(L, 1, "caap.zmq.keypair")
 
 extern int errno;
@@ -138,6 +139,7 @@ static int skt_stream_notify(lua_State *L);
 static int skt_immediate(lua_State *L);
 static int skt_mandatory(lua_State *L);
 static int skt_set_id(lua_State *L);
+static int skt_asstr(lua_State *L);
 
 static int new_socket(lua_State *L) {
     void *ctx = checkctx(L);
@@ -147,11 +149,7 @@ static int new_socket(lua_State *L) {
     //
     lua_getfield(L, lua_upvalueindex(1), ttype);
     int type = lua_tointeger(L, -1);
-//    lua_pop(L, 1);
-    lua_setuservalue(L, -2);
-    //
-    luaL_getmetatable(L, "caap.zmq.socket");
-    lua_setmetatable(L, -2);
+    lua_setuservalue(L, -2); // do I really need it besides asstr? XXX
 
     *pskt = zmq_socket(ctx, type);
     if (*pskt == NULL) {
@@ -160,49 +158,46 @@ static int new_socket(lua_State *L) {
 	return 2;
     }
 
+    lua_newtable(L);
+    luaL_setmetatable(L, "caap.zmq.socket");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    lua_pushcclosure(L, &skt_asstr, 0);
+    lua_setfield(L, -2, "__tostring");
+
     if(type == ZMQ_SUB) { //   || type == ZMQ_XSUB
-	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_subscribe, 0);
 	lua_setfield(L, -2, "subscribe");
 	lua_pushcclosure(L, &skt_unsubscribe, 0);
 	lua_setfield(L, -2, "unsubscribe");
-	lua_pop(L, 1); // pop metatable
     }
 
     if(type == ZMQ_ROUTER) {
-	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_mandatory, 0);
 	lua_setfield(L, -2, "mandatory");
-	lua_pop(L, 1); // pop metatable
     }
 
     if(type == ZMQ_STREAM) {
-	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_stream_notify, 0);
 	lua_setfield(L, -2, "notify");
-	lua_pop(L, 1); // pop metatable
     }
 
     if(type == ZMQ_STREAM || type == ZMQ_ROUTER) {
-	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_set_rid, 0);
 	lua_setfield(L, -2, "set_rid");
-	lua_pop(L, 1); // pop metatable
     }
 
     if(type == ZMQ_REQ || type == ZMQ_PUSH || type == ZMQ_DEALER) {
-	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_immediate, 0);
 	lua_setfield(L, -2, "immediate");
-	lua_pop(L, 1); // pop metatable
     }
 
     if(type == ZMQ_REQ || type == ZMQ_REP || type == ZMQ_DEALER || type == ZMQ_ROUTER ) {
-	luaL_getmetatable(L, "caap.zmq.socket");
 	lua_pushcclosure(L, &skt_set_id, 0);
 	lua_setfield(L, -2, "set_id");
-	lua_pop(L, 1); // pop metatable
     }
+
+    lua_setmetatable(L, -2);
 
     return 1;
 }
@@ -423,6 +418,7 @@ const char* skt_label(int t) {
 }
 
 static int skt_asstr(lua_State *L) {
+    void *skt = checkskt(L);
     lua_getuservalue(L, 1);
     lua_pushfstring(L, "zmq{Socket: %s}", skt_label(lua_tointeger(L, 2)));
     return 1;
@@ -988,7 +984,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"monitor",    skt_monitor},
     {"alive",	   skt_keep_alive},
     {"curve", 	   skt_curve_server},
-    {"__tostring", skt_asstr},
+//    {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},
     {NULL,	   NULL}
 };
