@@ -613,7 +613,7 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 1));
 	}
     } else // empty message ;(
-	lua_pushnil(L);
+	lua_pushstring(L,"");
     rc = zmq_msg_close( &msg );
     if (rc == -1) {
 	lua_pushfstring(L, "ERROR: message could not be closed properly, %s!", zmq_strerror( errno ));
