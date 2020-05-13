@@ -413,7 +413,7 @@ const char* skt_label(int t) {
 	case ZMQ_DEALER: return "DEALER";
 	case ZMQ_ROUTER: return "ROUTER";
 	case ZMQ_STREAM: return "STREAM";
-	default: return NULL;
+	default: return "UNKNOWN";
     }
 }
 
@@ -984,7 +984,6 @@ static const struct luaL_Reg skt_meths[] = {
     {"monitor",    skt_monitor},
     {"alive",	   skt_keep_alive},
     {"curve", 	   skt_curve_server},
-//    {"__tostring", skt_asstr},
     {"__gc",	   skt_gc},
     {NULL,	   NULL}
 };
