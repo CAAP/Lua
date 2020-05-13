@@ -18,7 +18,7 @@ typedef struct {
 } cert_t;
 
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
-#define checkskt(L) *(void **)lua_touserdata(L, 1)
+#define checkskt(L,k) *(void **)lua_touserdata(L, k)
 //#define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
 #define checkkey(L) (cert_t *)luaL_checkudata(L, 1, "caap.zmq.keypair")
 
@@ -287,7 +287,7 @@ static int key_server(lua_State *L) {
 // and then sets the ZMQ_CURVE_ PUBLICKEY & SECRETKEY
 static int key_client(lua_State *L) {
     cert_t *cert = checkkey(L);
-    void *skt = *(void **)lua_touserdata(L, 2); //luaL_checkudata(L, 2, "caap.zmq.socket")
+    void *skt = checkskt(L, 2); //luaL_checkudata(L, 2, "caap.zmq.socket")
     const char *public_txt = luaL_checkstring(L, 3);
 
     if (strlen(public_txt) > 40) {
@@ -341,7 +341,7 @@ static int new_poll_in(lua_State *L) {
 	pit->revents = 0;
 	pit->events = ZMQ_POLLIN;
 	    lua_rawgeti(L, 1, ++i);
-	    void *skt = *(void **)lua_touserdata(L, -1); // luaL_checkudata(L, -1, "caap.zmq.socket")
+	    void *skt = checkskt(L, -1); // luaL_checkudata(L, -1, "caap.zmq.socket")
 	pit->socket = skt;
 	    lua_pop(L, 1);
     }
@@ -367,11 +367,11 @@ static int new_poll_in(lua_State *L) {
 // socket.
 
 static int new_proxy(lua_State *L) {
-    void *frontend = checkskt(L);
-    void *backend = *(void **)lua_touserdata(L, 2); // luaL_checkudata(L, 2, "caap.zmq.socket")
+    void *frontend = checkskt(L, 1);
+    void *backend = checkskt(L, 2); // luaL_checkudata(L, 2, "caap.zmq.socket")
     void *capture = NULL;
     if (lua_isuserdata(L, 3))
-	capture = *(void **)lua_touserdata(L, 3); // luaL_checkudata(L, 3, "caap.zmq.socket")
+	capture = checkskt(L, 3); // luaL_checkudata(L, 3, "caap.zmq.socket")
     int rc = zmq_proxy(frontend, backend, capture);
     zmqError(L, rc, "ERROR: Unable to create proxy")
 }
@@ -418,14 +418,14 @@ const char* skt_label(int t) {
 }
 
 static int skt_asstr(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     lua_getuservalue(L, 1);
     lua_pushfstring(L, "zmq{Socket: %s}", skt_label(lua_tointeger(L, 2)));
     return 1;
 }
 
 static int skt_gc(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     if (skt && (zmq_close(skt) == 0))
 	skt = NULL;
     return 0;
@@ -440,7 +440,7 @@ static int skt_gc(lua_State *L) {
 // binds the socket to a local endpoint (port)
 // and then accepts incoming connections
 static int skt_bind (lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     const char *addr = luaL_checkstring(L, 2);
     int rc = zmq_bind(skt, addr);
     zmqError(L, rc, "ERROR: Unable to bind socket to endpoint") // addr
@@ -450,7 +450,7 @@ static int skt_bind (lua_State *L) {
 // argument from the endpoint specified by
 // the endpoint argument
 static int skt_unbind(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     const char *addr = luaL_checkstring(L, 2);
     int rc = zmq_unbind(skt, addr);
     zmqError(L, rc, "ERROR: Unable to unbind socket to endpoint") // addr
@@ -460,7 +460,7 @@ static int skt_unbind(lua_State *L) {
 // connects the socket to an endpoint (port)
 // and then accepts incoming connections
 static int skt_connect (lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     const char *addr = luaL_checkstring(L, 2);
     int rc = zmq_connect(skt, addr);
     zmqError(L, rc, "ERROR: Unable to connect socket to endpoint") // addr
@@ -475,7 +475,7 @@ static int skt_connect (lua_State *L) {
 // transferred to the network depends on
 // the value of the ZMQ_LINGER option.
 static int skt_disconnect (lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     const char *addr = luaL_checkstring(L, 2);
     int rc = zmq_disconnect(skt, addr);
     zmqError(L, rc, "ERROR: Unable to disconnect socket to endpoint") // addr
@@ -511,7 +511,7 @@ int send_msg(lua_State *L, void *skt, int idx, int flags) {
 
 // sends ALL or NONE
 static int skt_send_mult_msg(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     luaL_checktype(L, 2, LUA_TTABLE);
     int nowait = lua_toboolean(L, 3);
 
@@ -539,7 +539,7 @@ static int skt_send_mult_msg(lua_State *L) {
 }
 
 static int skt_send_msg(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int nowait = lua_toboolean(L, 3);
 
     int rc = send_msg(L, skt, 2, nowait);
@@ -620,7 +620,7 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 
 static int mult_part_msg(lua_State *L) {
     int nowait = lua_toboolean(L, lua_upvalueindex(1));
-    void *skt = checkskt(L);	   // state
+    void *skt = checkskt(L, 1);	   // state
     int flag = lua_toboolean(L, 2); // MORE_FLAG
 
     if (!flag)
@@ -643,7 +643,7 @@ static int skt_iter_msg(lua_State *L) {
 
 
 static int skt_recv_mult_msg(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int nowait = lua_toboolean(L, 2); // NOWAIT flag
     lua_newtable(L); int k = 1;
     while( recv_msg(L, skt, nowait) == 1)
@@ -653,7 +653,7 @@ static int skt_recv_mult_msg(lua_State *L) {
 }
 
 static int skt_recv_msg(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int nowait = lua_toboolean(L, 2); // NOWAIT flag
     lua_pushboolean(L, recv_msg(L, skt, nowait) == 1); // msg & 'more'
     return 2;
@@ -672,7 +672,7 @@ static int skt_recv_msg(lua_State *L) {
 // for this connection. Otherwise, the ROUTER generates
 // its usual arbitrary random identity.
 static int skt_set_id(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     char identity[10];
     size_t len;
     int rc;
@@ -698,7 +698,7 @@ static int skt_set_id(lua_State *L) {
 // Only applies to the first subsequent call to zmq_connect
 // if empty, sets a simple random printable identity
 static int skt_set_rid(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
 
     char identity[10];
     size_t len;
@@ -722,7 +722,7 @@ static int skt_set_rid(lua_State *L) {
 }
 
 static int skt_subscribe(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     const char* filter = luaL_checkstring(L, 2);
     int rc = zmq_setsockopt(skt, ZMQ_SUBSCRIBE, filter, strlen(filter));
     if (rc == -1) {
@@ -735,7 +735,7 @@ static int skt_subscribe(lua_State *L) {
 }
 
 static int skt_unsubscribe(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     const char* filter = luaL_checkstring(L, 2);
     int rc = zmq_setsockopt(skt, ZMQ_UNSUBSCRIBE, filter, strlen(filter));
     if (rc == -1) {
@@ -748,7 +748,7 @@ static int skt_unsubscribe(lua_State *L) {
 }
 
 static int skt_stream_notify(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int notify = lua_toboolean(L, 2);
     size_t len = sizeof(notify);
 
@@ -767,7 +767,7 @@ static int skt_stream_notify(lua_State *L) {
 // lead to lost messages. If this option is set to 1
 // messages shall be queued only to completed connections.
 static int skt_immediate(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int swift = lua_toboolean(L, 2);
     size_t len = sizeof(swift);
 
@@ -784,7 +784,7 @@ static int skt_immediate(lua_State *L) {
 // socket option KEEPALIVE where supported by the OS, the default
 // value of -1 means to skip any overrides and leave it to OS default
 static int skt_keep_alive(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int swift = lua_toboolean(L, 2); // 1 or 0
     size_t len = sizeof(swift);
 
@@ -802,7 +802,7 @@ static int skt_keep_alive(lua_State *L) {
 // discards the message silently, a value of 1 returns a EHOSTUNREACH
 // if the message cannot be routed or EAGAIN if the SNDHWM is reached.
 static int skt_mandatory(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int swift = lua_toboolean(L, 2);
     size_t len = sizeof(swift);
 
@@ -817,7 +817,7 @@ static int skt_mandatory(lua_State *L) {
 }
 
 static int skt_fd(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int fd = 0;
     size_t len = sizeof(fd);
     if (zmq_getsockopt(skt, ZMQ_FD, &fd, &len) == 0) {
@@ -831,7 +831,7 @@ static int skt_fd(lua_State *L) {
 }
 
 static int skt_events(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int flag = ZMQ_POLLIN;
     size_t len = sizeof(flag);
     if (zmq_getsockopt(skt, ZMQ_EVENTS, &flag, &len) == 0) { // success!!!
@@ -850,7 +850,7 @@ static int skt_events(lua_State *L) {
 }
 
 static int skt_monitor(lua_State *L) {
-    void *skt = checkskt(L); // cliente a monitorear
+    void *skt = checkskt(L, 1); // cliente a monitorear
     const char* endpoint = luaL_checkstring(L, 2);
 
     int rc = zmq_socket_monitor(skt, endpoint, ZMQ_EVENT_ALL);
@@ -872,7 +872,7 @@ static int skt_monitor(lua_State *L) {
 // positive values specify an upper bound for the linger
 // period in milliseconds.
 static int skt_linger(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     int msecs = luaL_checkinteger(L, 2);
     size_t len = sizeof(msecs);
 
@@ -891,7 +891,7 @@ static int skt_linger(lua_State *L) {
 // and then sets the ZMQ_CURVE_SECRETKEY option
 // with its secret key
 static int skt_curve_server(lua_State *L) {
-    void *skt = checkskt(L);
+    void *skt = checkskt(L, 1);
     const char* secret_txt = luaL_checkstring(L, 2);
 
     if (strlen(secret_txt) > 40) {
