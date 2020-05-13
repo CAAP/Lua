@@ -17,8 +17,43 @@ typedef struct {
     char secret_txt [41];
 } cert_t;
 
+int checkmetatable(lua_State *L) {
+    if (lua_getmetatable(L, -2)) { // metatable's metatable
+	lua_replace(L, -3);
+	if (lua_rawequal(L, -1, -2))
+	    return 1;
+	else
+	    return checkmetatable(L);
+    }
+    return 0;
+}
+
+void *L_testudata(lua_State *L, int ud, const char *tname) {
+    void *p = lua_touserdata(L, ud);
+    if (p != NULL) {
+	if (lua_getmetatable(L, ud)) {
+	    luaL_getmetatable(L, tname);
+	    if (!(lua_rawequal(L, -1, -2) || checkmetatable(L)))
+		p = NULL;
+	    lua_pop(L, 2);
+	    return p;
+	}
+    }
+    return NULL;
+}
+
+void *L_checkudata(lua_State *L, int ud, const char *tname) {
+    void *p = L_testudata(L, ud, tname);
+    if (p == NULL) { /* value is not a userdata with a metatable */
+	const char *msg = lua_pushfstring(L, "%s expected, got %s", tname, luaL_typename(L, ud));
+	luaL_argerror(L, ud, msg);
+    }
+    return p;
+}
+
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
-#define checkskt(L,k) *(void **)lua_touserdata(L, k)
+//#define checkskt(L,k) *(void **)lua_touserdata(L, k)
+#define checkskt(L,k) *(void **)L_checkudata(L, k, "caap.zmq.socket")
 //#define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
 #define checkkey(L) (cert_t *)luaL_checkudata(L, 1, "caap.zmq.keypair")
 
