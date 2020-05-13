@@ -140,6 +140,7 @@ static int skt_immediate(lua_State *L);
 static int skt_mandatory(lua_State *L);
 static int skt_set_id(lua_State *L);
 static int skt_asstr(lua_State *L);
+static int skt_gc(lua_State *L);
 
 static int new_socket(lua_State *L) {
     void *ctx = checkctx(L);
@@ -164,6 +165,8 @@ static int new_socket(lua_State *L) {
     lua_setfield(L, -2, "__index");
     lua_pushcclosure(L, &skt_asstr, 0);
     lua_setfield(L, -2, "__tostring");
+    lua_pushcclosure(L, &skt_gc, 0);
+    lua_setfield(L, -2, "__gc");
 
     if(type == ZMQ_SUB) { //   || type == ZMQ_XSUB
 	lua_pushcclosure(L, &skt_subscribe, 0);
@@ -290,11 +293,22 @@ static int key_client(lua_State *L) {
     void *skt = checkskt(L, 2); //luaL_checkudata(L, 2, "caap.zmq.socket")
     const char *public_txt = luaL_checkstring(L, 3);
 
-    if (strlen(public_txt) > 40) {
+    if (strlen(public_txt) != 40) {
 	lua_pushnil(L);
 	lua_pushstring(L, "ERROR: key-pair out of size, string greater than 40 chars.\n");
 	return 2;
     }
+
+/*
+    size_t N = strlen(public_txt);
+    if (N% 5 != 0) {
+	lua_pushnil(L);
+	lua_pushstring(L, "ERROR: key-pair out of size, string must have a length divisible by 5.\n");
+	return 2;
+    }
+    uint8_t *public key = lua_newuserdata(L, (N*4/5)*sizeof(uint8_t));
+
+*/
 
     uint8_t public_key [32];
     zmq_z85_decode(public_key, public_txt);
@@ -984,7 +998,6 @@ static const struct luaL_Reg skt_meths[] = {
     {"monitor",    skt_monitor},
     {"alive",	   skt_keep_alive},
     {"curve", 	   skt_curve_server},
-    {"__gc",	   skt_gc},
     {NULL,	   NULL}
 };
 
