@@ -287,7 +287,7 @@ static int key_server(lua_State *L) {
 // and then sets the ZMQ_CURVE_ PUBLICKEY & SECRETKEY
 static int key_client(lua_State *L) {
     cert_t *cert = checkkey(L);
-    void *skt = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+    void *skt = *(void **)lua_touserdata(L, 2); //luaL_checkudata(L, 2, "caap.zmq.socket")
     const char *public_txt = luaL_checkstring(L, 3);
 
     if (strlen(public_txt) > 40) {
@@ -341,7 +341,7 @@ static int new_poll_in(lua_State *L) {
 	pit->revents = 0;
 	pit->events = ZMQ_POLLIN;
 	    lua_rawgeti(L, 1, ++i);
-	    void *skt = *(void **)luaL_checkudata(L, -1, "caap.zmq.socket");
+	    void *skt = *(void **)lua_touserdata(L, -1); // luaL_checkudata(L, -1, "caap.zmq.socket")
 	pit->socket = skt;
 	    lua_pop(L, 1);
     }
@@ -368,10 +368,10 @@ static int new_poll_in(lua_State *L) {
 
 static int new_proxy(lua_State *L) {
     void *frontend = checkskt(L);
-    void *backend = *(void **)luaL_checkudata(L, 2, "caap.zmq.socket");
+    void *backend = *(void **)lua_touserdata(L, 2); // luaL_checkudata(L, 2, "caap.zmq.socket")
     void *capture = NULL;
     if (lua_isuserdata(L, 3))
-	capture = *(void **)luaL_checkudata(L, 3, "caap.zmq.socket");
+	capture = *(void **)lua_touserdata(L, 3); // luaL_checkudata(L, 3, "caap.zmq.socket")
     int rc = zmq_proxy(frontend, backend, capture);
     zmqError(L, rc, "ERROR: Unable to create proxy")
 }
