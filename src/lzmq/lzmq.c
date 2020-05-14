@@ -467,7 +467,7 @@ const char* skt_label(int t) {
 }
 
 static int skt_asstr(lua_State *L) {
-    void *skt = checkskt(L, 1);
+//    void *skt = checkskt(L, 1);
     lua_getuservalue(L, 1);
     lua_pushfstring(L, "zmq{Socket: %s}", skt_label(lua_tointeger(L, 2)));
     return 1;
@@ -621,7 +621,7 @@ static int skt_send_msg(lua_State *L) {
 // byte sequence (cast: void * -> uint8_t *)
 // special case for monitoring events
 
-const char* skt_transport_events(int e) {
+const char* skt_transport_events(uint16_t e) {
     switch(e) {
 	case ZMQ_EVENT_CONNECTED: return "CONNECTED"; break;
 	case ZMQ_EVENT_CONNECT_DELAYED: return "CONNECT_DELAYED"; break;
@@ -647,23 +647,25 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	return rc;
     }
     if (rc > 0) { // *IO* - number of bytes in the message
-	lua_getuservalue(L, 1);
-	int t = lua_tointeger(L, -1); lua_pop(L, 1);
 	size_t len = zmq_msg_size( &msg );
-	rc = strlen( lua_pushlstring(L, (const char *)zmq_msg_data( &msg ), len) );
-	if ((rc != len) && (t == ZMQ_PAIR)) {
+	uint8_t *data = (uint8_t *)zmq_msg_data( &msg );
+	rc = strlen( lua_pushlstring(L, (const char *)data, len) );
+/*	if (rc != len) {
 	    lua_pop(L, 1);
-	    uint16_t *data = (uint16_t *)zmq_msg_data( &msg );
-	    const char* mev = skt_transport_events(*data);
-	    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 1));
-	}
-	if ((rc != len) && ((t == ZMQ_ROUTER) || (t == ZMQ_STREAM))) {
-	    lua_pop(L, 1);
-printf("number of bytes %d", len);
-	    uint8_t *data = (uint8_t *)zmq_msg_data( &msg );
-	    if ((len == 5) && (data[0] == '\0'))
-		lua_pushinteger(L, *(uint32_t *)(data + 1));
-	}
+	    if (t == ZMQ_PAIR) {
+		const char *mev = skt_transport_events(*(uint16_t *)data);
+		if (data[3] == '\0')
+		    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 3));
+		else
+		    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 2));
+	    }
+	    else if ((t == ZMQ_ROUTER) || (t == ZMQ_STREAM)) {
+		if ((len == 5) && (data[0] == '\0'))
+		    lua_pushinteger(L, *(uint32_t *)(data + 1));
+		else
+		    lua_pushinteger(L, -1);
+	    }
+	}*/
     } else // empty message ;(
 	lua_pushstring(L,"");
     rc = zmq_msg_close( &msg );
