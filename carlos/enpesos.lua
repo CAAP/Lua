@@ -38,7 +38,7 @@ local function enpesos(z)
     local function digit(i) return int(y:sub(i,i)) end
 
     if N == 1 and y == '1' then return format('UN PESO %s/100 M.N.', c) end
-    if N == 1 and y == '0' or N == 0 then return format('ZERO PESOS %s/100 M.N.') end
+    if N == 1 and y == '0' or N == 0 then return format('ZERO PESOS %s/100 M.N.', c) end
     if N > 7 or (N==7 and digit(1) > 1) then suffix[7] = 'MILLONES' end
 
     y = y:reverse()
