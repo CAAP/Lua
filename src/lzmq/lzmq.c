@@ -657,6 +657,13 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	    const char* mev = skt_transport_events(*data);
 	    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 1));
 	}
+	if ((rc != len) && ((t == ZMQ_ROUTER) || (t == ZMQ_STREAM))) {
+	    lua_pop(L, 1);
+printf("number of bytes %d", len);
+	    uint8_t *data = (uint8_t *)zmq_msg_data( &msg );
+	    if ((len == 5) && (data[0] == '\0'))
+		lua_pushinteger(L, *(uint32_t *)(data + 1));
+	}
     } else // empty message ;(
 	lua_pushstring(L,"");
     rc = zmq_msg_close( &msg );
