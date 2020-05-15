@@ -167,6 +167,7 @@ static int new_context(lua_State *L) {
     return 1;
 }
 
+static int skt_monitor_event(lua_State *L);
 static int skt_subscribe(lua_State *L);
 static int skt_unsubscribe(lua_State *L);
 static int skt_set_rid(lua_State *L);
@@ -202,6 +203,11 @@ static int new_socket(lua_State *L) {
     lua_setfield(L, -2, "__tostring");
     lua_pushcclosure(L, &skt_gc, 0);
     lua_setfield(L, -2, "__gc");
+
+    if(type == ZMQ_PAIR) {
+	lua_pushcclosure(L, &skt_monitor_event, 0);
+	lua_setfield(L, -2, "monitor_event");
+    }
 
     if(type == ZMQ_SUB) { //   || type == ZMQ_XSUB
 	lua_pushcclosure(L, &skt_subscribe, 0);
@@ -601,6 +607,31 @@ static int skt_send_msg(lua_State *L) {
     return 1;
 }
 
+const char* skt_transport_event(uint16_t e) {
+    switch(e) {
+	case ZMQ_EVENT_CONNECTED:  return "CONNECTED"; break;
+	case ZMQ_EVENT_CONNECT_DELAYED: return "CONNECT_DELAYED"; break;
+	case ZMQ_EVENT_CONNECT_RETRIED: return "CONNECT_RETRIED"; break;
+	case ZMQ_EVENT_LISTENING: return "LISTENING"; break;
+	case ZMQ_EVENT_BIND_FAILED: return "BIND_FAILED"; break;
+	case ZMQ_EVENT_ACCEPTED: return "ACCEPTED"; break;
+	case ZMQ_EVENT_ACCEPT_FAILED: return "ACCEPT_FAILED"; break;
+	case ZMQ_EVENT_CLOSED: return "CLOSED"; break;
+	case ZMQ_EVENT_CLOSE_FAILED: return "CLOSE_FAILED"; break;
+	case ZMQ_EVENT_DISCONNECTED: return "DISCONNECTED"; break;
+	case ZMQ_EVENT_MONITOR_STOPPED: return "STOPPED"; break;
+	case ZMQ_EVENT_HANDSHAKE_FAILED_NO_DETAIL: return zmq_strerror( errno ); break;
+	default: return "unknown";
+    }
+}
+
+static int skt_monitor_event(lua_State *L) {
+//    void *skt = checkskt(L, 1);
+    uint16_t e = (uint16_t)luaL_checkinteger(L, 2);
+    lua_pushstring(L, skt_transport_event(e));
+    return 1;
+}
+
 // Receive a message part from a socket
 // receive a message from the socket referenced
 // by the socket argument and store it in the
@@ -621,22 +652,6 @@ static int skt_send_msg(lua_State *L) {
 // byte sequence (cast: void * -> uint8_t *)
 // special case for monitoring events
 
-const char* skt_transport_events(uint16_t e) {
-    switch(e) {
-	case ZMQ_EVENT_CONNECTED: return "CONNECTED"; break;
-	case ZMQ_EVENT_CONNECT_DELAYED: return "CONNECT_DELAYED"; break;
-	case ZMQ_EVENT_CONNECT_RETRIED: return "CONNECT_RETRIED"; break;
-	case ZMQ_EVENT_LISTENING: return "LISTENING"; break;
-	case ZMQ_EVENT_BIND_FAILED: return "BIND_FAILED"; break;
-	case ZMQ_EVENT_ACCEPTED: return "ACCEPTED"; break;
-	case ZMQ_EVENT_ACCEPT_FAILED: return "ACCEPT_FAILED"; break;
-	case ZMQ_EVENT_CLOSED: return "CLOSED"; break;
-	case ZMQ_EVENT_CLOSE_FAILED: return "CLOSE_FAILED"; break;
-	case ZMQ_EVENT_DISCONNECTED: return "DISCONNECTED"; break;
-	default: return "unknown";
-    }
-}
-
 int recv_msg(lua_State *L, void *skt, int nowait) {
     int rc;
     zmq_msg_t msg;
@@ -651,14 +666,14 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	uint8_t *data = (uint8_t *)zmq_msg_data( &msg );
 	rc = strlen( lua_pushlstring(L, (const char *)data, len) );
 /*	if (rc != len) {
-	    lua_pop(L, 1);
+    lua_getuservalue(L, 1);
+    int t = lua_tointeger(L, -1);
+    lua_pop(L, 1);
 	    if (t == ZMQ_PAIR) {
-		const char *mev = skt_transport_events(*(uint16_t *)data);
-		if (data[3] == '\0')
-		    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 3));
-		else
-		    lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 2));
-	    }
+	    lua_pop(L, 1);
+		const char *mev = skt_transport_event(*(uint16_t *)data);
+		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 2));
+	    }}
 	    else if ((t == ZMQ_ROUTER) || (t == ZMQ_STREAM)) {
 		if ((len == 5) && (data[0] == '\0'))
 		    lua_pushinteger(L, *(uint32_t *)(data + 1));

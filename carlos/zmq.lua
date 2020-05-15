@@ -2,10 +2,13 @@
 local M = {}
 
 -- Import section
-local zmq = require'lzmq'
-local fd = require'carlos.fold'
-local assert = assert
-local print = print
+local assert 	   = assert
+local pairs 	   = pairs
+local print 	   = print
+local getmetatable = getmetatable
+
+local castU16 	   = require'lints'.castU16
+local castU32 	   = require'lints'.castU32
 
 -- No more external access after this point
 _ENV = nil
@@ -14,10 +17,36 @@ _ENV = nil
 
 -- Local function for module-only access
 
+local function socket(t, ppties, ctx)
+    local skt = assert(ctx:socket(t:upper()))
+    for pty,v in pairs(ppties) do
+	local f = skt[pty]
+	assert(f(skt,v))
+    end
+    return skt
+end
 
 ---------------------------------
 -- Public function definitions --
 ---------------------------------
+
+function M.monitor(ctx, server, endpoint)
+    assert( endpoint:match'inproc' )
+    local skt = assert(ctx:socket'PAIR')
+    assert( server:monitor( endpoint ) )
+    assert( skt:connect( endpoint ) )
+
+    local mt = getmetatable(skt)
+    function mt:receive()
+	local msgs = self:recv_msgs()
+	assert(#msgs == 2) -- per specification
+	assert(#msgs[1] == 6) -- per specification
+	return self:monitor_event(castU16(msgs[1])), castU32(msgs[1]:sub(3,6)), msgs[2]
+    end
+
+    return skt
+end
+
 
 -- A socket of type ZMQ_STREAM is used to send and receive TCP
 -- data from a non-ZMQ peer, when using the tcp:// transport.
@@ -41,28 +70,8 @@ _ENV = nil
 -- You MUST send one identity frame followed by one data frame. The
 -- ZMQ_SNDMORE flag is required for identity frames byt is ignored
 -- on data frames.
-function M.stream(endpoint, ctx)
-    local ctx = ctx or assert(zmq.context())
-    local srv = assert(ctx:socket'STREAM')
-    assert(srv:bind(endpoint))
-    local MM = {}
 
-    local function msgs() return srv:recv_msgs() end -- returns iter, state & counter
 
-    function MM.close(id) assert(srv:send_msgs{id, ""}) end
-
-    function MM.send(id, s) return srv:send_msgs{id, s} end
-
-    function MM.receive()
-	local id, more = assert(srv:recv_msg())
-	if more then more = fd.reduce(msgs, fd.into, {}) end
-	return id, more
-    end
-
-    function MM.socket() return srv end
-
-    return MM
-end
 
 -------------------------------------------------------
 -- A socket of type REP is used by a service to receive requests from and send
@@ -102,80 +111,6 @@ end
 -- delimiter part.
 -------------------------------------------------------
 
---[[
-function M.socket(sktt, ctx)
-    local ctx = ctx or assert(zmq.context())
-    local skt = assert(ctx:socket(sktt))
-    local MM = {endpoints={}}
-
-    function MM.socket() return skt end
-
-    function MM.ls() return fd.reduce(fd.keys(MM), function(_,x) print(x) end) end
-
-    -- PUB, XPUB, REP, ROUTER
-    if sktt == 'PUB' or sktt == 'XPUB' or sktt == 'REP' or sktt == 'ROUTER' then
-    function MM.bind(endpoint)
-	local ends = MM.endpoints
-	local endpoint = endpoint or "tcp://*:5555"
-	local p, err = assert(skt:bind(endpoint))
-	if p then ends[#ends+1] = endpoint; return p end
-	return p,err
-    end
-
-    function MM.unbind(endpoint)
-	local ends = MiM.endpoints
-	assert(endpoint and ends[endpoint], "ERROR: Endpoint not previously bound!")
-	local p,err = assert(skt:unbind(endpoint))
-	if p then ends[endpoint] = nil; return p end
-	return p,err
-    end
-
-    function MM.send( msg ) return assert( skt:send_msg(msg) ) end
-
-    -- REQ, DEALER, SUB, XSUB
-    else
-
-    function MM.connect(endpoint)
-	local ends = MM.endpoints
-	local endpoint = endpoint or "tcp://localhost:5556"
-	local p,err = assert(skt:connect(endpoint))
-	if p then ends[#ends+1] = endpoint; return p end
-	return p,err
-    end
-
-    function MM.disconnect(endpoint)
-	local ends = MM.endpoints
-	assert(endpoint and ends[endpoint], "ERROR: Endpoint not previously connected!")
-	local p,err = assert(skt:disconnect(endpoint))
-	if p then ends[endpoint] = nil; return p end
-	return p,err
-    end
-
-    function MM.receive() return assert( skt:recv_msg() ) end
-
-	if sktt == 'SUB' then
-    MM.tags = {}
-    function MM.subscribe(tag)
-	local tags = MM.tags
-	local tag = tag or ""
-	local p,err = assert(skt:subscribe(tag))
-	if p then tags[#tags+1] = tag; return p end
-	return p,err
-    end
-
-    function MM.unsubscribe(tag)
-	local tags = MM.tags
-	assert(tag and tags[tag], "ERROR: Tag not previously subscribed!")
-	local p,err = assert(skt:unsubscribe(tag))
-	if p then tags[tag] = nil; return p end
-	return p,err
-    end
-    	end
-    end -- fi
-
-    return MM
-end
---]]
 
 ----------------------------------
 
