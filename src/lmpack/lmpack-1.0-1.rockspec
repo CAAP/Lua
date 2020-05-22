@@ -1,4 +1,4 @@
-package = "LMSGPACK"
+package = "LMPACK"
 version = "1.0-1"
 
 source = {

@@ -1,8 +1,10 @@
 #include <lua.h>
 #include <lauxlib.h>
 
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 
 ///////////////////////////////////
@@ -53,15 +55,63 @@ static int cast_uint32(lua_State *L) {
     return 1;
 }
 
+//////
+static int tobase64(lua_State *L) {
+    lua_Integer x = luaL_checkinteger(L, 1);
+    lua_pushstring(L, l64a(x));
+    return 1;
+}
+
+static int frombase64(lua_State *L) {
+    const char *y = luaL_checkstring(L, 1);
+    lua_pushinteger(L, a64l(y));
+    return 1;
+}
+
+//////
+static int tohex(lua_State *L) {
+    size_t N;
+    const char *y = luaL_checklstring(L, 1, &N);
+
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    luaL_buffinitsize(L, &b, 2*N);
+
+    int i; char xx[3];
+    for (i=0; i<N;) {
+	sprintf(xx, "%02x", (uint8_t)y[i++]);
+	luaL_addlstring(&b, xx, 2);
+    }
+
+    luaL_pushresult(&b);
+    return 1;
+}
+
+static int str2hex(lua_State *L) {
+    const char *y = luaL_checkstring(L, 1);
+
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    lua_pushfstring(L, "%p", (unsigned char *)y);
+    luaL_addvalue(&b);
+
+    luaL_pushresult(&b);
+    return 1;
+}
+
 ////////////////////////////////////////////
 
 static const struct luaL_Reg dgst_funcs[] = {
-    {"getU16", get_uint16},
-    {"getU32", get_uint32},
-    {"putU16", put_uint16},
-    {"putU32", put_uint32},
+    {"getU16",  get_uint16},
+    {"getU32",  get_uint32},
+    {"putU16",  put_uint16},
+    {"putU32",  put_uint32},
     {"castU16", cast_uint16},
     {"castU32", cast_uint32},
+    {"b64",	tobase64},
+    {"getB64",	frombase64},
+    {"hex",	tohex},
+    {"phex",	str2hex},
     {NULL, NULL}
 };
 
