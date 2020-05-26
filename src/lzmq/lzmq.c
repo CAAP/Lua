@@ -52,9 +52,7 @@ void *L_checkudata(lua_State *L, int ud, const char *tname) {
 }
 
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
-//#define checkskt(L,k) *(void **)lua_touserdata(L, k)
 #define checkskt(L,k) *(void **)L_checkudata(L, k, "caap.zmq.socket")
-//#define checkskt(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.socket")
 #define checkkey(L) (cert_t *)luaL_checkudata(L, 1, "caap.zmq.keypair")
 
 extern int errno;
@@ -203,6 +201,8 @@ static int new_socket(lua_State *L) {
     lua_setfield(L, -2, "__tostring");
     lua_pushcclosure(L, &skt_gc, 0);
     lua_setfield(L, -2, "__gc");
+    lua_pushfstring(L, "caap.zmq.socket.%s", ttype);
+    lua_setfield(L, -2, "__name");
 
     if(type == ZMQ_PAIR) {
 	lua_pushcclosure(L, &skt_monitor_event, 0);

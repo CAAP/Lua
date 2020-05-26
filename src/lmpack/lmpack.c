@@ -102,6 +102,7 @@ static int pack_table(lua_State *L) {
     while (lua_next(L, 1) != 0) {
 	if (lua_type(L, -2) == LUA_TSTRING)
 	    N++;
+	lua_pop(L, 1);
     }
 
     msgpack_pack_map(&pk, N);
@@ -110,8 +111,8 @@ static int pack_table(lua_State *L) {
 	if (lua_type(L, -2) == LUA_TSTRING) {
 	    addSimple(L, -2, LUA_TSTRING, &pk);
 	    addSimple(L, -1, lua_type(L, -1), &pk);
-	    lua_pop(L, 1);
 	}
+	lua_pop(L, 1);
     }
 
     luaL_pushresult(&b);
@@ -142,7 +143,6 @@ static int unpack(lua_State *L) {
     msgpack_unpacked_init( &ans );
 
     size_t M = 0;
-
     q = msgpack_unpack_next(&ans, msg, N, &M);
 
     if (q == MSGPACK_UNPACK_PARSE_ERROR) {
@@ -151,34 +151,35 @@ static int unpack(lua_State *L) {
 	return 2;
     }
 
-    getSimple(L, ans.data);
+    msgpack_object o = ans.data;
+    if (o.type ==  MSGPACK_OBJECT_ARRAY) {
+	lua_newtable(L);
+	int k = 1;
+	if (o.via.array.size != 0) {
+	    msgpack_object *po = o.via.array.ptr;
+	    msgpack_object const *pend = po + o.via.array.size;
+	    for (; po < pend; ++po) {
+		getSimple(L, *po);
+		lua_rawseti(L, -2, k++);
+	    }
+	}
+    } else if (o.type ==  MSGPACK_OBJECT_MAP) {
+	lua_newtable(L);
+	if (o.via.array.size != 0) {
+	    msgpack_object_kv *po = o.via.map.ptr;
+	    msgpack_object_kv const *pend = po + o.via.map.size;
+	    for (; po < pend; ++po) {
+		getSimple(L, po->key);
+		getSimple(L, po->val);
+		lua_setfield(L, -3, lua_tostring(L, -2));
+		lua_pop(L, 1); // key
+	    }
+	}
+    } else
+	getSimple(L, o);
+
 
     msgpack_unpacked_destroy( &ans );
-
-    return 1;
-}
-
-static int unpack_array(lua_State *L) {
-    size_t N;
-    const char *msg = luaL_checklstring(L, 1, &N);
-
-    msgpack_unpacked ans;
-    msgpack_unpack_return q;
-    msgpack_unpacked_init( &ans );
-
-    size_t M = 0;
-
-    q = msgpack_unpack_next(&ans, msg, N, &M);
-
-    if (q == MSGPACK_UNPACK_PARSE_ERROR) {
-	lua_pushnil(L);
-	lua_pushliteral(L, "ERROR: msgpack unpack parse error.\n");
-	return 2;
-    }
-    getSimple(L, ans.data);
-
-    msgpack_unpacked_destroy( &ans );
-
     return 1;
 }
 

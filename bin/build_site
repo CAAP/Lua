@@ -101,6 +101,13 @@ local function add_basefiles(ret)
     return true
 end
 
+local function add_js(ret)
+    local fp = assert(popen(format("ls %s/*.js", DIR:gsub(STEM, 'jscript')), 'r'))
+    for f in fp:lines() do add_onefile(f, ret) end
+    fp:close()
+    return true
+end
+
 local function copy_files(exts)
     for _,ext in ipairs(exts) do
 	if ext:match'svg' or ext:match'json' then
@@ -120,6 +127,9 @@ local ret = sites.html()
 
 -- If inside a subdirectory, first add base files from ROOT directory
 if ROOT then add_basefiles(ret); STEM = ROOT:match'/?([^/]+)$' ..  '/' .. STEM end
+
+-- ADD jscript FOLDER if found !!!
+add_js(ret)
 
 -- Look for files under DIR with extensions css|js|html
 local exts = filter_exts{"css", "js", "html"}
