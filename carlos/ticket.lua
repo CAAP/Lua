@@ -53,8 +53,9 @@ function M.ticket(head, data)
 
     local function procesar(w)
 	local unidad = w.unidad or 'PZ' -- and w.unidad:match'[^_]+' 
+	local unitario = w.unitario or 0
 	ret[#ret+1] = w.desc
-	ret[#ret+1] = campos{w.clave, w.qty, w.rea, w.unitario..' '..unidad, w.subTotal}
+	ret[#ret+1] = campos{w.clave, w.qty, w.rea, unitario..' '..unidad, w.subTotal}
 	if (w.uidSAT) then
 	    local uid = int(w.uidSAT) or 0
 	    uid = uid>0 and uid or 'XXXXX'
