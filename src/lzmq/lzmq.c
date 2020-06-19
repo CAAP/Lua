@@ -949,7 +949,7 @@ static int skt_linger(lua_State *L) {
     int msecs = luaL_checkinteger(L, 2);
     size_t len = sizeof(msecs);
 
-    int rc = zmq_setsockopt(skt, ZMQ_IMMEDIATE, &msecs, len);
+    int rc = zmq_setsockopt(skt, ZMQ_LINGER, &msecs, len);
     if (rc == -1) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "ERROR: setting linger period for socket, %s!", zmq_strerror( errno ));
