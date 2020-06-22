@@ -388,7 +388,12 @@ static int new_poll_in(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
 
     int i, N = luaL_len(L, 1);
-    zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+    int M = N;
+
+    if (lua_type(L, 2) == LUA_TTABLE)
+	M += luaL_len(L, 2);
+
+    zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, M*sizeof(zmq_pollitem_t));
 
     for (i=0; i<N;) {
 	pit = it+i;
@@ -396,14 +401,49 @@ static int new_poll_in(lua_State *L) {
 	pit->revents = 0;
 	pit->events = ZMQ_POLLIN;
 	    lua_rawgeti(L, 1, ++i);
-	    void *skt = checkskt(L, -1); // luaL_checkudata(L, -1, "caap.zmq.socket")
-	pit->socket = skt;
+	pit->socket = checkskt(L, -1);;
 	    lua_pop(L, 1);
+    }
+
+    int j = 0;
+    for (;i<M; i++) {
+	pit = it+i;
+	    lua_rawgeti(L, 2, ++j);
+	pit->fd = lua_tointeger(L, -1);
+	    lua_pop(L, 1);
+	pit->revents = 0;
+	pit->events = ZMQ_POLLIN;
+	pit->socket = NULL;
+    }
+
+    int rc = zmq_poll(it, M, -1);
+    zmqError(L, rc, "ERROR: Unable to poll event")
+}
+
+
+// POLLER
+/*
+static int new_pollfd_in(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+
+    int i, N = luaL_len(L, 1);
+
+    zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
+
+    for (i=0; i<N;) {
+	pit = it+i;
+	    lua_rawgeti(L, 1, ++i);
+	pit->fd = lua_tointeger(L, -1);
+	    lua_pop(L, 1);
+	pit->revents = 0;
+	pit->events = ZMQ_POLLIN;
+	pit->socket = NULL;
     }
 
     int rc = zmq_poll(it, N, -1);
     zmqError(L, rc, "ERROR: Unable to poll event")
 }
+*/
 
 
 // PROXY
