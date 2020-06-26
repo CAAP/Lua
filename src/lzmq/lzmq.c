@@ -911,6 +911,21 @@ static int skt_keep_alive(lua_State *L) {
     return 1;
 }
 
+static int skt_timeout(lua_State *L) {
+    void *skt = checkskt(L, 1);
+    int swift = luaL_checkinteger(L, 2);
+    size_t len = sizeof(swift);
+
+    int rc = zmq_setsockopt(skt, ZMQ_CONNECT_TIMEOUT, &swift, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting keepalive flag for socket, %s!", zmq_strerror( errno ));
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 // when an unroutable message is encountered, a value of 0 (default)
 // discards the message silently, a value of 1 returns a EHOSTUNREACH
 // if the message cannot be routed or EAGAIN if the SNDHWM is reached.
@@ -1096,6 +1111,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"events",	   skt_events},
     {"monitor",    skt_monitor},
     {"alive",	   skt_keep_alive},
+    {"timeout",	   skt_timeout},
     {"curve", 	   skt_curve_server},
     {NULL,	   NULL}
 };
