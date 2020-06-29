@@ -705,22 +705,6 @@ int recv_msg(lua_State *L, void *skt, int nowait) {
 	size_t len = zmq_msg_size( &msg );
 	uint8_t *data = (uint8_t *)zmq_msg_data( &msg );
 	rc = strlen( lua_pushlstring(L, (const char *)data, len) );
-/*	if (rc != len) {
-    lua_getuservalue(L, 1);
-    int t = lua_tointeger(L, -1);
-    lua_pop(L, 1);
-	    if (t == ZMQ_PAIR) {
-	    lua_pop(L, 1);
-		const char *mev = skt_transport_event(*(uint16_t *)data);
-		lua_pushfstring(L, "%s %d", mev, *(uint32_t *)(data + 2));
-	    }}
-	    else if ((t == ZMQ_ROUTER) || (t == ZMQ_STREAM)) {
-		if ((len == 5) && (data[0] == '\0'))
-		    lua_pushinteger(L, *(uint32_t *)(data + 1));
-		else
-		    lua_pushinteger(L, -1);
-	    }
-	}*/
     } else // empty message ;(
 	lua_pushstring(L,"");
     rc = zmq_msg_close( &msg );
