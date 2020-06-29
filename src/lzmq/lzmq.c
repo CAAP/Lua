@@ -389,9 +389,13 @@ static int new_poll_in(lua_State *L) {
 
     int i, N = luaL_len(L, 1);
     int M = N;
+    int K = -1;
 
     if (lua_type(L, 2) == LUA_TTABLE)
 	M += luaL_len(L, 2);
+
+    if (lua_type(L, 3) == LUA_TNUMBER)
+	K = luaL_checkinteger(L, 3);
 
     zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, M*sizeof(zmq_pollitem_t));
 
@@ -416,7 +420,7 @@ static int new_poll_in(lua_State *L) {
 	pit->socket = NULL;
     }
 
-    int rc = zmq_poll(it, M, -1);
+    int rc = zmq_poll(it, M, K);
     zmqError(L, rc, "ERROR: Unable to poll event")
 }
 
@@ -895,6 +899,21 @@ static int skt_keep_alive(lua_State *L) {
     return 1;
 }
 
+static int skt_timeout(lua_State *L) {
+    void *skt = checkskt(L, 1);
+    int swift = luaL_checkinteger(L, 2);
+    size_t len = sizeof(swift);
+
+    int rc = zmq_setsockopt(skt, ZMQ_CONNECT_TIMEOUT, &swift, len);
+    if (rc == -1) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "ERROR: setting keepalive flag for socket, %s!", zmq_strerror( errno ));
+	return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 // when an unroutable message is encountered, a value of 0 (default)
 // discards the message silently, a value of 1 returns a EHOSTUNREACH
 // if the message cannot be routed or EAGAIN if the SNDHWM is reached.
@@ -1080,6 +1099,7 @@ static const struct luaL_Reg skt_meths[] = {
     {"events",	   skt_events},
     {"monitor",    skt_monitor},
     {"alive",	   skt_keep_alive},
+    {"timeout",	   skt_timeout},
     {"curve", 	   skt_curve_server},
     {NULL,	   NULL}
 };
