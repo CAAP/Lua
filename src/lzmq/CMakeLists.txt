@@ -4,7 +4,14 @@ project( LUAZEROMQ C )
 
 add_library(lzmq SHARED lzmq.c)
 
-target_link_libraries(lzmq "/usr/local/lib/libzmq.so.5.1")
+find_library(ZMQ_LIBRARY
+    NAMES zmq)
+
+if(ZMQ_LIBRARY)
+	target_link_libraries(lzmq ${ZMQ_LIBRARY})
+else(ZMQ_LIBRARY)
+	message(FATAL_ERROR "CMake could not find ZEROMQ Library")
+endif(ZMQ_LIBRARY)
 
 set_target_properties(lzmq PROPERTIES PREFIX "")
 
