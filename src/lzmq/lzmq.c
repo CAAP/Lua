@@ -10,6 +10,7 @@
 
 #define randof(num) (int)((float)(num)*rand()/(RAND_MAX+1.0))
 
+
 typedef struct {
     uint8_t public_key [32];
     uint8_t secret_key [32];
