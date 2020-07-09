@@ -138,15 +138,19 @@ static void wrapper(lua_State *L, struct mg_connection *c) {
 static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_State *L = MGR->user_data;
     int N = lua_gettop(L);
+    lua_pushinteger(L, ev); // +1
     switch(ev) {
 	case MG_EV_HTTP_REQUEST:
-	    lua_pushinteger(L, ev); // +1
 	    http_message(L, (struct http_message *)ev_data); // +4
-	    wrapper(L, c); // +2
-	    lua_rotate(L, N+1, 2);
-	    lua_pcall(L, 6, 0, 0);
+	    break;
+	case MG_EV_ACCEPT:
+	    break;
+	case MG_EV_CONNECT:
 	    break;
     }
+    wrapper(L, c); // +2
+    lua_rotate(L, N+1, 2);
+    lua_pcall(L, (lua_gettop(L)-N-1), 0, 0); // in case of ERROR XXX
     lua_settop(L, N);
 }
 
