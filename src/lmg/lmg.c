@@ -9,8 +9,11 @@ static struct mg_mgr *MGR;
 
 #define checkconn(L) *(struct mg_connection **)luaL_checkudata(L, 1, "caap.mg.connection")
 
-/*
+#define newconn(L) (struct mg_connection **)lua_newuserdata(L, sizeof(struct mg_connection *));\
+    luaL_getmetatable(L, "caap.mg.connection");\
+    lua_setmetatable(L, -2)
 
+/*
 MG_F_LISTENING // THIS CONNECTION IS LISTENING
 MG_F_CONNECTING // connect() CALL IN PROGRESS
 MG_F_IS_WEBSOCKET // WEBSOCKET SPECIFIC
@@ -31,7 +34,6 @@ MG_F_USER_3
 MG_F_USER_4
 MG_F_USER_5
 MG_F_USER_6
-
 */
 
 // HELPERS
@@ -122,52 +124,28 @@ static void http_message(lua_State *L, struct http_message *m) {
 	lua_pushliteral(L, "");
 }
 
+static void wrapper(lua_State *L, struct mg_connection *c) {
+    void *p = c->user_data;
+    luaL_getmetatable(L, "caap.mg.connection");
+    lua_pushlightuserdata(L, p);
+    lua_rawget(L, -2); // handler +1
+    luaL_checktype(L, -1, LUA_TFUNCTION);
+    lua_replace(L, -2);
+    struct mg_connection **pc = newconn(L); // connection +1
+    *pc = c;
+}
 
 static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_State *L = MGR->user_data;
     int N = lua_gettop(L);
     switch(ev) {
 	case MG_EV_HTTP_REQUEST:
-printf("\nhttp request event received.\n");
-	    luaL_getmetatable(L, "caap.mg.connection"); // +1 metatable
-	    lua_rawgeti(L, -2, (int)c->user_data); // +2 connection (userdata)
-	    luaL_checkudata(L, -1, "caap.mg.connection");
-	    lua_getuservalue(L, -1); // get handler (lua function)
-printf("\nLua state has %d elements.\n", lua_gettop(L));
-	    lua_pushvalue(L, -2); // copy of connection
-	    lua_pushinteger(L, ev); // event value
-printf("\nLua state has %d elements.\n", lua_gettop(L));
-	    http_message(L, (struct http_message *)ev_data); // Four values added to stack
-printf("\nLua state has %d elements.\n", lua_gettop(L));
-	    if (LUA_OK != lua_pcall(L, 6, 0, 0)) {
-		lua_pop(L, 1); // pop error
-	    }
-	    lua_pop(L, 2); // connection, metatable
+	    lua_pushinteger(L, ev); // +1
+	    http_message(L, (struct http_message *)ev_data); // +4
+	    wrapper(L, c); // +2
+	    lua_rotate(L, N+1, 2);
+	    lua_pcall(L, 6, 0, 0);
 	    break;
-/*	MG_EV_POLL:
-	    break;
-	MG_EV_ACCEPT:
-	    break;
-	MG_EV_CONNECT:
-	    break;
-	MG_EV_RECV:
-	    break;
-	MG_EV_SEND:
-	    break;
-	MG_EV_CLOSE:
-	    break;
-	MG_EV_TIMER:
-	    break;
-	MG_EV_HTTP_REPLY:
-	    break;
-	MG_EV_HTTP_CHUNK:
-	    break;
-	MG_EV_WEBSOCKET_HANDSHAKE_REQUEST:
-	    break;
-	MG_EV_WEBSOCKET_HANDSHAKE_DONE:
-	    break;
-	MG_EV_WEBSOCKET_HANDSHAKE_FRAME:
-	    break;*/
     }
     lua_settop(L, N);
 }
@@ -205,8 +183,7 @@ static int conn_print(lua_State *L) {
 
 static int conn_asstr(lua_State *L) {
     struct mg_connection *c = checkconn(L);
-    lua_pushliteral(L, "Mongoose Connection (active)");
-    lua_pushlightuserdata(L, c->user_data);
+    lua_pushfstring(L, "Mongoose Connection (%p)", (void *)c->user_data);
     return 1;
 }
 
@@ -228,11 +205,13 @@ static int conn_gc(lua_State *L) {
 static int mgr_bind_http(lua_State *L) {
     const char *host = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
+    lua_CFunction handler = lua_tocfunction(L, 2);
 
     struct mg_bind_opts bind_opts;
     const char *err;
     memset(&bind_opts, 0, sizeof(bind_opts));
     bind_opts.error_string = &err;
+    bind_opts.user_data = (void *)&handler;
 
     struct mg_connection *c = mg_bind_opt(MGR, host, &ev_handler, bind_opts);
     if (c == NULL) {
@@ -241,22 +220,18 @@ static int mgr_bind_http(lua_State *L) {
 	return 2;
     }
     mg_set_protocol_http_websocket(c);
-    bind_opts.user_data = (void *)&c;
 
     struct mg_connection **nc = (struct mg_connection **)lua_newuserdata(L, sizeof(struct mg_connection *));
     luaL_getmetatable(L, "caap.mg.connection");
     lua_setmetatable(L, -2);
     *nc = c;
 
-    lua_pushvalue(L, 2); // handler function
-    lua_setuservalue(L, -2); // as user value
-/*
     luaL_getmetatable(L, "caap.mg.connection");
-    int N = luaL_len(L, -1) + 1;
-    lua_pushvalue(L, -3); // connection
-    lua_rawseti(L, -3, N);
+    lua_pushlightuserdata(L, &handler);
+    lua_pushvalue(L, 2);
+    lua_rawset(L, -3);
     lua_pop(L, 1);
-*/
+
     return 1;
 }
 
