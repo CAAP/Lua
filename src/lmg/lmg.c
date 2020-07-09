@@ -108,7 +108,7 @@ static send_error(lua_State *L) {
 // cast (void *)ev_data -> (struct http_message *)
 // returns
 // 	http method, http uri, http query string, http body
-static int http_message(lua_State *L, struct http_message *m) {
+static void http_message(lua_State *L, struct http_message *m) {
     struct mg_str *ss = &m->method;
     lua_pushlstring(L, ss->p, ss->len);
     ss = &m->uri;
@@ -120,7 +120,6 @@ static int http_message(lua_State *L, struct http_message *m) {
 	lua_pushlstring(L, ss->p, ss->len);
     else
 	lua_pushliteral(L, "");
-    return 4;
 }
 
 
@@ -129,13 +128,21 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
     int N = lua_gettop(L);
     switch(ev) {
 	case MG_EV_HTTP_REQUEST:
-	    luaL_getmetatable(L, "caap.mg.connection");
+printf("\nhttp request event received.\n", N);
+printf("\nLua state has %d elements.\n", N);
+	    lua_pushlightuserdata(L, &MGR);
+	    lua_rawget(L, LUA_REGISTRYINDEX);
+printf("\nLua state has %d elements.\n", N);
 	    lua_pushlightuserdata(L, &c);
 	    lua_rawget(L, -2); // get connection (userdata)
+printf("\nLua state has %d elements.\n", N);
 	    lua_getuservalue(L, -1); // get handler (lua function)
+printf("\nLua state has %d elements.\n", N);
 	    lua_pushvalue(L, -2); // copy of connection
 	    lua_pushinteger(L, ev); // event value
+printf("\nDone collecting connection & handler function.\n", N);
 	    http_message(L, (struct http_message *)ev_data); // Four values added to stack
+printf("\nDone computing values from http message object.\n", N);
 	    if (LUA_OK != lua_pcall(L, 6, 0, 0)) {
 		lua_pop(L, 1); // pop error
 	    }
@@ -239,14 +246,18 @@ static int mgr_bind_http(lua_State *L) {
 
     struct mg_connection **nc = (struct mg_connection **)lua_newuserdata(L, sizeof(struct mg_connection *));
     luaL_getmetatable(L, "caap.mg.connection");
-    lua_pushlightuserdata(L, &c); // c pointer
-    lua_pushvalue(L, -3); // connection
-    lua_rawset(L, -3);
     lua_setmetatable(L, -2);
     *nc = c;
 
     lua_pushvalue(L, 2); // handler function
     lua_setuservalue(L, -2);
+
+    lua_pushlightuserdata(L, &MGR); // c pointer
+    lua_rawget(L, LUA_REGISTRYINDEX); // handler table
+    lua_pushlightuserdata(L, &c);
+    lua_pushvalue(L, -3); // connection
+    lua_rawset(L, -3);
+    lua_pop(L, 1);
 
     return 1;
 }
@@ -281,6 +292,10 @@ static void lmg_mgr(lua_State *L) {
     lua_setmetatable(L, -2);
     // create the mongoose mgr, keeping lua_State as userdata
     mg_mgr_init(mgr, L);
+    //
+    lua_pushlightuserdata(L, &MGR);
+    lua_newtable(L);
+    lua_rawset(L, LUA_REGISTRYINDEX);
 }
 
 static void handler_fn(lua_State *L) {
