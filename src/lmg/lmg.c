@@ -124,6 +124,12 @@ static void http_message(lua_State *L, struct http_message *m) {
 	lua_pushliteral(L, "");
 }
 
+static void recv_buffer(lua_State *L, struct mg_connection *c) {
+    struct mbuf *data = &c->recv_mbuf;
+    lua_pushlstring(L, data->buf, data->len);
+    mbuf_remove(data, data->len);
+}
+
 static void wrapper(lua_State *L, struct mg_connection *c) {
     void *p = c->user_data;
     luaL_getmetatable(L, "caap.mg.connection");
@@ -145,7 +151,8 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
 	    break;
 	case MG_EV_ACCEPT:
 	    break;
-	case MG_EV_CONNECT:
+	case MG_EV_RECV:
+	    recv_buffer(L, c); // +1
 	    break;
     }
     wrapper(L, c); // +2
@@ -174,17 +181,24 @@ static int conn_send_reply(lua_State *L) {
     return 1;
 }
 
-static int conn_print(lua_State *L) {
+static int conn_send(lua_State *L) {
     struct mg_connection *c = checkconn(L);
-    const char *msg = luaL_checkstring(L, 2);
+    size_t len;
+    const char *msg = luaL_checklstring(L, 2, &len);
     int sendclose = lua_toboolean(L, 3);
-    mg_printf(c, "%s", msg);
+    mg_send(c, msg, (int)len);
     if (sendclose)
 	c->flags |= MG_F_SEND_AND_CLOSE;
     lua_pushboolean(L, 1);
     return 1;
 }
 
+static int conn_http_websocket(lua_State *L) {
+    struct mg_connection *c = checkconn(L);
+    mg_set_protocol_http_websocket(c);
+    lua_pushboolean(L, 1);
+    return 1;
+}
 static int conn_asstr(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     lua_pushfstring(L, "Mongoose Connection (%p)", (void *)c->user_data);
@@ -206,7 +220,7 @@ static int conn_gc(lua_State *L) {
 
 /*   ******************************   */
 
-static int mgr_bind_http(lua_State *L) {
+static int mgr_bind(lua_State *L) {
     const char *host = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
     lua_CFunction handler = lua_tocfunction(L, 2);
@@ -223,7 +237,6 @@ static int mgr_bind_http(lua_State *L) {
 	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
 	return 2;
     }
-    mg_set_protocol_http_websocket(c);
 
     struct mg_connection **nc = (struct mg_connection **)lua_newuserdata(L, sizeof(struct mg_connection *));
     luaL_getmetatable(L, "caap.mg.connection");
@@ -293,7 +306,7 @@ static void handler_fn(lua_State *L) {
 
 static const struct luaL_Reg mgr_meths[] = {
     {"poll",	   mgr_poll},
-    {"bind_http",  mgr_bind_http},
+    {"bind",	   mgr_bind},
     {"__tostring", mgr_asstr},
     {"__gc",	   mgr_gc},
     {NULL,	   NULL}
@@ -303,7 +316,8 @@ static const struct luaL_Reg mgr_meths[] = {
 
 static const struct luaL_Reg conn_meths[] = {
     {"reply",	   conn_send_reply},
-    {"print",	   conn_print},
+    {"send",	   conn_send},
+    {"http",	   conn_http_websocket},
     {"__tostring", conn_asstr},
     {"__gc",	   conn_gc},
     {NULL,	   NULL}
