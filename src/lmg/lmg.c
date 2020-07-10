@@ -226,14 +226,17 @@ static int conn_gc(lua_State *L) {
 static int mgr_bind(lua_State *L) {
     const char *host = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
-    lua_CFunction handler = lua_tocfunction(L, 2);
     int http = lua_toboolean(L, 3);
+
+    struct mg_connection **nc = (struct mg_connection **)lua_newuserdata(L, sizeof(struct mg_connection *));
+    luaL_getmetatable(L, "caap.mg.connection");
+    lua_setmetatable(L, -2);
 
     struct mg_bind_opts bind_opts;
     const char *err;
     memset(&bind_opts, 0, sizeof(bind_opts));
     bind_opts.error_string = &err;
-    bind_opts.user_data = (void *)&handler;
+    bind_opts.user_data = (void *)nc;
 
     struct mg_connection *c = mg_bind_opt(MGR, host, http?&ev_http_handler:&ev_handler, bind_opts);
     if (c == NULL) {
@@ -243,14 +246,10 @@ static int mgr_bind(lua_State *L) {
     }
     if (http)
 	mg_set_protocol_http_websocket(c);
-
-    struct mg_connection **nc = (struct mg_connection **)lua_newuserdata(L, sizeof(struct mg_connection *));
-    luaL_getmetatable(L, "caap.mg.connection");
-    lua_setmetatable(L, -2);
     *nc = c;
 
     luaL_getmetatable(L, "caap.mg.connection");
-    lua_pushlightuserdata(L, &handler);
+    lua_pushlightuserdata(L, (void *)nc);
     lua_pushvalue(L, 2);
     lua_rawset(L, -3);
     lua_pop(L, 1);
