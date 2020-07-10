@@ -127,7 +127,6 @@ static void http_message(lua_State *L, struct http_message *m) {
 static void recv_buffer(lua_State *L, struct mg_connection *c) {
     struct mbuf *data = &c->recv_mbuf;
     lua_pushlstring(L, data->buf, data->len);
-    mbuf_remove(data, data->len);
 }
 
 static void wrapper(lua_State *L, struct mg_connection *c) {
@@ -140,7 +139,7 @@ static void wrapper(lua_State *L, struct mg_connection *c) {
     struct mg_connection **pc = newconn(L); // connection +1
     *pc = c;
 }
-
+/*
 static void ev_http_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_State *L = MGR->user_data;
     int N = lua_gettop(L);
@@ -153,12 +152,14 @@ static void ev_http_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_pcall(L, (lua_gettop(L)-N-1), 0, 0); // in case of ERROR XXX
     lua_settop(L, N);
 }
+*/
 static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_State *L = MGR->user_data;
     int N = lua_gettop(L);
     lua_pushinteger(L, ev); // +1
     switch(ev) {
-	case MG_EV_ACCEPT:
+	case MG_EV_HTTP_REQUEST:
+	    http_message(L, (struct http_message *)ev_data); // +4
 	    break;
 	case MG_EV_RECV:
 	    recv_buffer(L, c); // +1
@@ -202,6 +203,14 @@ static int conn_send(lua_State *L) {
     return 1;
 }
 
+static int conn_remove_buff(lua_State *L) {
+    struct mg_connection *c = checkconn(L);
+    struct mbuf *data = &c->recv_mbuf;
+    lua_pushlstring(L, data->buf, data->len);
+    mbuf_remove(data, data->len);
+    return 1;
+}
+
 static int conn_asstr(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     lua_pushfstring(L, "Mongoose Connection (%p)", (void *)c->user_data);
@@ -238,7 +247,7 @@ static int mgr_bind(lua_State *L) {
     bind_opts.error_string = &err;
     bind_opts.user_data = (void *)nc;
 
-    struct mg_connection *c = mg_bind_opt(MGR, host, http?&ev_http_handler:&ev_handler, bind_opts);
+    struct mg_connection *c = mg_bind_opt(MGR, host, &ev_handler, bind_opts);
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
@@ -322,6 +331,7 @@ static const struct luaL_Reg mgr_meths[] = {
 static const struct luaL_Reg conn_meths[] = {
     {"reply",	   conn_send_reply},
     {"send",	   conn_send},
+    {"rm",	conn_remove_buff},
     {"__tostring", conn_asstr},
     {"__gc",	   conn_gc},
     {NULL,	   NULL}
