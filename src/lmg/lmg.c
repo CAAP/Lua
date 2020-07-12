@@ -124,9 +124,10 @@ static void http_message(lua_State *L, struct http_message *m) {
 	lua_pushliteral(L, "");
 }
 
-static void recv_buffer(lua_State *L, struct mg_connection *c) {
+static void recv_message(lua_State *L, struct mg_connection *c) {
     struct mbuf *data = &c->recv_mbuf;
     lua_pushlstring(L, data->buf, data->len);
+    mbuf_remove(data, data->len);
 }
 
 static void wrapper(lua_State *L, struct mg_connection *c) {
@@ -139,30 +140,27 @@ static void wrapper(lua_State *L, struct mg_connection *c) {
     struct mg_connection **pc = newconn(L); // connection +1
     *pc = c;
 }
-/*
-static void ev_http_handler(struct mg_connection *c, int ev, void *ev_data) {
-    lua_State *L = MGR->user_data;
-    int N = lua_gettop(L);
-    lua_pushinteger(L, ev); // +1
-    if (ev == MG_EV_HTTP_REQUEST) {
-	http_message(L, (struct http_message *)ev_data); // +4
-    }
-    wrapper(L, c); // +2
-    lua_rotate(L, N+1, 2);
-    lua_pcall(L, (lua_gettop(L)-N-1), 0, 0); // in case of ERROR XXX
-    lua_settop(L, N);
-}
-*/
+
 static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_State *L = MGR->user_data;
     int N = lua_gettop(L);
     lua_pushinteger(L, ev); // +1
     switch(ev) {
 	case MG_EV_HTTP_REQUEST:
-	    http_message(L, (struct http_message *)ev_data); // +4
+		http_message(L, (struct http_message *)ev_data); // +4
+	    break;
+	case MG_EV_HTTP_REPLY:
 	    break;
 	case MG_EV_RECV:
-	    recv_buffer(L, c); // +1
+	    if ((c->flags & MG_F_USER_1) == 0)
+		recv_message(L, c); // +1
+	    break;
+/* error in case conection was unexpectedly dropped by server
+	case MG_EV_CLOSE:
+	    break; */
+	// return address | error in case of faulty connection to server XXX
+	case MG_EV_CONNECT:
+	    lua_pushboolean(L, *(int *)ev_data); // +1
 	    break;
     }
     wrapper(L, c); // +2
@@ -203,11 +201,9 @@ static int conn_send(lua_State *L) {
     return 1;
 }
 
-static int conn_remove_buff(lua_State *L) {
+static int conn_is_websocket(lua_State *L) {
     struct mg_connection *c = checkconn(L);
-    struct mbuf *data = &c->recv_mbuf;
-    lua_pushlstring(L, data->buf, data->len);
-    mbuf_remove(data, data->len);
+    lua_pushboolean(L, c->flags & MG_F_IS_WEBSOCKET);
     return 1;
 }
 
@@ -253,8 +249,10 @@ static int mgr_bind(lua_State *L) {
 	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
 	return 2;
     }
-    if (http)
+    if (http) {
 	mg_set_protocol_http_websocket(c);
+	c->flags |= MG_F_USER_1; // http & ws enabled !!!
+    }
     *nc = c;
 
     luaL_getmetatable(L, "caap.mg.connection");
@@ -329,12 +327,12 @@ static const struct luaL_Reg mgr_meths[] = {
 /*   ******************************   */
 
 static const struct luaL_Reg conn_meths[] = {
-    {"reply",	   conn_send_reply},
-    {"send",	   conn_send},
-    {"rm",	conn_remove_buff},
-    {"__tostring", conn_asstr},
-    {"__gc",	   conn_gc},
-    {NULL,	   NULL}
+    {"reply",	    conn_send_reply},
+    {"send",	    conn_send},
+    {"isws",	    conn_is_websocket},
+    {"__tostring",  conn_asstr},
+    {"__gc",	    conn_gc},
+    {NULL,	    NULL}
 };
 
 /*   ******************************   */
