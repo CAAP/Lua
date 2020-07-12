@@ -124,12 +124,6 @@ static void http_message(lua_State *L, struct http_message *m) {
 	lua_pushliteral(L, "");
 }
 
-static void recv_message(lua_State *L, struct mg_connection *c) {
-    struct mbuf *data = &c->recv_mbuf;
-    lua_pushlstring(L, data->buf, data->len);
-    mbuf_remove(data, data->len);
-}
-
 static void wrapper(lua_State *L, struct mg_connection *c) {
     void *p = c->user_data;
     luaL_getmetatable(L, "caap.mg.connection");
@@ -145,6 +139,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_State *L = MGR->user_data;
     int N = lua_gettop(L);
     lua_pushinteger(L, ev); // +1
+
     switch(ev) {
 	case MG_EV_HTTP_REQUEST:
 		http_message(L, (struct http_message *)ev_data); // +4
@@ -152,8 +147,6 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
 	case MG_EV_HTTP_REPLY:
 	    break;
 	case MG_EV_RECV:
-	    if ((c->flags & MG_F_USER_1) == 0)
-		recv_message(L, c); // +1
 	    break;
 /* error in case conection was unexpectedly dropped by server
 	case MG_EV_CLOSE:
@@ -198,6 +191,14 @@ static int conn_send(lua_State *L) {
     if (sendclose)
 	c->flags |= MG_F_SEND_AND_CLOSE;
     lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int conn_recv_buffer(lua_State *L) {
+    struct mg_connection *c = checkconn(L);
+    struct mbuf *data = &c->recv_mbuf;
+    lua_pushlstring(L, data->buf, data->len);
+    mbuf_remove(data, data->len);
     return 1;
 }
 
@@ -251,7 +252,7 @@ static int mgr_bind(lua_State *L) {
     }
     if (http) {
 	mg_set_protocol_http_websocket(c);
-	c->flags |= MG_F_USER_1; // http & ws enabled !!!
+	c->flags |= MG_F_USER_3; // http & ws enabled !!!
     }
     *nc = c;
 
@@ -329,6 +330,7 @@ static const struct luaL_Reg mgr_meths[] = {
 static const struct luaL_Reg conn_meths[] = {
     {"reply",	    conn_send_reply},
     {"send",	    conn_send},
+    {"recv", 	    conn_recv_buffer},
     {"isws",	    conn_is_websocket},
     {"__tostring",  conn_asstr},
     {"__gc",	    conn_gc},
