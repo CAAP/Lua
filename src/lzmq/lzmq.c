@@ -734,7 +734,7 @@ static int mult_part_msg(lua_State *L) {
 }
 
 static int skt_iter_msg(lua_State *L) {
-//    void *skt = checkskt(L);
+    checkskt(L);
     int nowait = lua_toboolean(L, 2); // NOWAIT flag
     lua_pushboolean(L, nowait);
     lua_pushcclosure(L, &mult_part_msg, 1);	// iter function + upvalue(NOWAIT flag)

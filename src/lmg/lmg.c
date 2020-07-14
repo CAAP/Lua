@@ -23,70 +23,6 @@ MG_F_RECV_AND_CLOSE // DRAIN RX AND CLOSE CONNECTION
 
 MG_F_SEND_AND_CLOSE // PUSH REMAINING DATA AND CLOSE
 MG_F_CLOSE_IMMMEDIATELY // DISCONNECT
-
-MG_F_PROTO_1
-MG_F_PROTO_2
-MG_F_ENABLE_BROADCAST
-
-MG_F_USER_1
-MG_F_USER_2
-MG_F_USER_3
-MG_F_USER_4
-MG_F_USER_5
-MG_F_USER_6
-*/
-
-// HELPERS
-// 
-// struct mg_str {
-// 	const char *p;
-// 	size_t len;
-// }
-//
-// struct mg_str mg_mk_str(const char *s);
-// struct mg_str mg_mk_str_n(const char *s, size_t len);
-//
-//
-
-
-/*
- * Parses an URI, general syntax is:
- * 	[scheme://[user_info@]]host[:port][/patch][?query][#fragment]
- * NULL pointers will be ignored.
- * returns 0 on success, -1 on error.
-*/
-//int mg_parse_uri(const struct mg_str uri, struct mg_str *scheme, struct mg_str *user_info, struct mg_str *host, unsigned int *port, struct mg_str *path, struct mg_str *query, struct mg_str *fragment);
-
-/*
-struct websocket_message {
-    unsigned char *data;
-    size_t size;
-    unsigned char flags;
-};
-*/
-
-/*
-static send_response(lua_State *L) {
-    struct mg_connection *nc = ;
-    int code = luaL_checkinteger(L, 2);
-    const char *headers = luaL_checkstring(L, 3);
-
-
-    mg_send_response_line(nc, code, headers);
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-static send_error(lua_State *L) {
-    struct mg_connection *nc = ;
-    int code = luaL_checkinteger(L, 2);
-    const char *errorstr = luaL_checkstring(L, 3);
-
-
-    mg_http_send_error(nc, code, errorstr);
-    lua_pushboolean(L, 1);
-    return 1;
-}
 */
 
 // EVENTS
@@ -110,7 +46,8 @@ static send_error(lua_State *L) {
 // cast (void *)ev_data -> (struct http_message *)
 // returns
 // 	http method, http uri, http query string, http body
-static void http_message(lua_State *L, struct http_message *m) {
+
+static void http_request(lua_State *L, struct http_message *m) {
     struct mg_str *ss = &m->method;
     lua_pushlstring(L, ss->p, ss->len);
     ss = &m->uri;
@@ -138,26 +75,24 @@ static void wrapper(lua_State *L, struct mg_connection *c) {
 static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
     lua_State *L = MGR->user_data;
     int N = lua_gettop(L);
-    lua_pushinteger(L, ev); // +1
+
+    wrapper(L, c); // +2   -> hanlder + connection
+    lua_pushinteger(L, ev); // +1  -> event
 
     switch(ev) {
 	case MG_EV_HTTP_REQUEST:
-		http_message(L, (struct http_message *)ev_data); // +4
+		http_request(L, (struct http_message *)ev_data); // +4
 	    break;
-	case MG_EV_HTTP_REPLY:
-	    break;
-	case MG_EV_RECV:
-	    break;
-/* error in case conection was unexpectedly dropped by server
-	case MG_EV_CLOSE:
-	    break; */
-	// return address | error in case of faulty connection to server XXX
+//	case MG_EV_HTTP_REPLY:
+//	case MG_EV_RECV:
+/* error in case conection was unexpectedly dropped by server */
+//	case MG_EV_CLOSE:
+// return address | error in case of faulty connection to server XXX
 	case MG_EV_CONNECT:
 	    lua_pushboolean(L, *(int *)ev_data); // +1
 	    break;
     }
-    wrapper(L, c); // +2
-    lua_rotate(L, N+1, 2);
+//    lua_rotate(L, N+1, 2);
     lua_pcall(L, (lua_gettop(L)-N-1), 0, 0); // in case of ERROR XXX
     lua_settop(L, N);
 }
@@ -176,6 +111,7 @@ static int conn_send_reply(lua_State *L) {
 	mg_printf(c, "%s", msg);
     } else
 	mg_send_response_line(c, code, headers);
+
     if (sendclose)
 	c->flags |= MG_F_SEND_AND_CLOSE;
     lua_pushboolean(L, 1);
@@ -196,32 +132,38 @@ static int conn_send(lua_State *L) {
 
 static int conn_recv_buffer(lua_State *L) {
     struct mg_connection *c = checkconn(L);
+    const int closep = lua_toboolean(L, 2);
     struct mbuf *data = &c->recv_mbuf;
     lua_pushlstring(L, data->buf, data->len);
     mbuf_remove(data, data->len);
+    if (closep)
+	c->flags |= MG_F_CLOSE_IMMEDIATELY;
     return 1;
 }
 
-static int conn_is_websocket(lua_State *L) {
+/*
+static int conn_get_flag(lua_State *L) {
     struct mg_connection *c = checkconn(L);
-    lua_pushboolean(L, c->flags & MG_F_IS_WEBSOCKET);
+    const int flag = luaL_checkint(L, 2);
+
+}
+*/
+
+static int conn_get_sock_address(lua_State *L) {
+    struct mg_connection *c = checkconn(L);
+    lua_pushlightuserdata(L, (void *)&c->sock);
     return 1;
 }
 
 static int conn_asstr(lua_State *L) {
     struct mg_connection *c = checkconn(L);
-    lua_pushfstring(L, "Mongoose Connection (%p)", (void *)c->user_data);
+    lua_pushfstring(L, "Mongoose Connection (%p) (%p)", (void *)c->user_data,(void *)&c->sock);
     return 1;
 }
 
 static int conn_gc(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     if (c != NULL) {
-	luaL_getmetatable(L, "caap.mg.connection");
-	lua_pushlightuserdata(L, c);
-	lua_pushnil(L);
-	lua_rawset(L, -3);
-	lua_pop(L, 1);
 	c = NULL;
     }
     return 0;
@@ -234,9 +176,7 @@ static int mgr_bind(lua_State *L) {
     luaL_checktype(L, 2, LUA_TFUNCTION);
     int http = lua_toboolean(L, 3);
 
-    struct mg_connection **nc = (struct mg_connection **)lua_newuserdata(L, sizeof(struct mg_connection *));
-    luaL_getmetatable(L, "caap.mg.connection");
-    lua_setmetatable(L, -2);
+    struct mg_connection **nc = newconn(L);
 
     struct mg_bind_opts bind_opts;
     const char *err;
@@ -270,6 +210,27 @@ static int mgr_poll(lua_State *L) {
     return mg_mgr_poll(MGR, mills);
 }
 
+static int next_connection(lua_State *L) {
+    struct mg_connection *c = NULL;
+    if (lua_isuserdata(L, 2))
+	c = *(struct mg_connection **)lua_touserdata(L, 2);
+	
+    c = mg_next(MGR, c);
+
+    if (c == NULL)
+	return 0;
+    struct mg_connection **pc = newconn(L);
+    *pc = c;
+    return 1;
+}
+
+static int mgr_iterator(lua_State *L) {
+    lua_pushcclosure(L, next_connection, 0); // iter
+    lua_pushboolean(L, 1);
+    lua_pushnil(L);
+    return 3; // iter + state + connection
+}
+
 static int mgr_asstr(lua_State *L) {
     lua_pushliteral(L, "Mongoose Event Manager (active)");
     return 1;
@@ -297,7 +258,7 @@ static void lmg_mgr(lua_State *L) {
     mg_mgr_init(mgr, L);
 }
 
-static void handler_fn(lua_State *L) {
+static void set_events(lua_State *L) {
     lua_newtable(L); // upvalue
     lua_pushinteger(L, MG_EV_POLL); lua_setfield(L, -2, "POLL");
     lua_pushinteger(L, MG_EV_ACCEPT); lua_setfield(L, -2, "ACCEPT");
@@ -315,11 +276,23 @@ static void handler_fn(lua_State *L) {
     lua_setfield(L, -2, "events");
 }
 
+/*
+static void set_flags(lua_State *L) {
+    lua_newtable(L); // upvalue
+    lua_pushinteger(L, MG_F_SEND_AND_CLOSE); lua_setfield(L, -2, "SENDC");
+    lua_pushinteger(L, MG_F_BUFFER_BUT_DONT_SEND); lua_setfield(L, -2, "BUFFER");
+    lua_pushinteger(L, MG_F_CLOSE_IMMEDIATELY); lua_setfield(L, -2, "CLOSE");
+    lua_pushinteger(L, MG_F_IS_WEBSOCKET); lua_setfield(L, -2, "ISWS");
+    lua_setfield(L, -2, "");
+}
+*/
+
 /*   ******************************   */
 
 static const struct luaL_Reg mgr_meths[] = {
     {"poll",	   mgr_poll},
     {"bind", 	   mgr_bind},
+    {"iter", 	   mgr_iterator},
     {"__tostring", mgr_asstr},
     {"__gc",	   mgr_gc},
     {NULL,	   NULL}
@@ -331,7 +304,7 @@ static const struct luaL_Reg conn_meths[] = {
     {"reply",	    conn_send_reply},
     {"send",	    conn_send},
     {"recv", 	    conn_recv_buffer},
-    {"isws",	    conn_is_websocket},
+    {"sock", 	    conn_get_sock_address},
     {"__tostring",  conn_asstr},
     {"__gc",	    conn_gc},
     {NULL,	    NULL}
@@ -344,12 +317,13 @@ int luaopen_lmg (lua_State *L) {
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, mgr_meths, 0);
-    handler_fn(L);
+    set_events(L);
 
     luaL_newmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, conn_meths, 0);
+//    set_flags(L);
 
     lmg_mgr(L);
 
