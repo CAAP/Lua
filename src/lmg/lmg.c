@@ -171,6 +171,36 @@ static int conn_gc(lua_State *L) {
 
 /*   ******************************   */
 
+static int mgr_connect(lua_State *L) {
+    const char *host = luaL_checkstring(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+//    int http = lua_toboolean(L, 3);
+
+    struct mg_connection **nc = newconn(L);
+
+    struct mg_connect_opts connect_opts;
+    const char *err;
+    memset(&connect_opts, 0, sizeof(connect_opts));
+    connect_opts.error_string = &err;
+    connect_opts.user_data = (void *)nc;
+
+    struct mg_connection *c = mg_connect_opt(MGR, host, &ev_handler, connect_opts);
+    if (c == NULL) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
+	return 2;
+    }
+    *nc = c;
+
+    luaL_getmetatable(L, "caap.mg.connection");
+    lua_pushlightuserdata(L, (void *)nc);
+    lua_pushvalue(L, 2);
+    lua_rawset(L, -3);
+    lua_pop(L, 1);
+
+    return 1;
+}
+
 static int mgr_bind(lua_State *L) {
     const char *host = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -190,10 +220,8 @@ static int mgr_bind(lua_State *L) {
 	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
 	return 2;
     }
-    if (http) {
+    if (http)
 	mg_set_protocol_http_websocket(c);
-	c->flags |= MG_F_USER_3; // http & ws enabled !!!
-    }
     *nc = c;
 
     luaL_getmetatable(L, "caap.mg.connection");
@@ -292,6 +320,7 @@ static void set_flags(lua_State *L) {
 static const struct luaL_Reg mgr_meths[] = {
     {"poll",	   mgr_poll},
     {"bind", 	   mgr_bind},
+    {"connect",	   mgr_connect},
     {"iter", 	   mgr_iterator},
     {"__tostring", mgr_asstr},
     {"__gc",	   mgr_gc},
