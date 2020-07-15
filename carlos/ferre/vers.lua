@@ -42,10 +42,12 @@ local function setVersion(v)
     end
 end
 
-local function switch( cmd, msg )
+local function switch( msg )
+
+    local cmd = msg[1]
 
     if cmd == 'CACHE' then
-	local fruit = msg:match'%s(%a+)'
+	local fruit = msg[2]
 	return CACHE.cache( fruit ) -- returns a table
     end
 

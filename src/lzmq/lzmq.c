@@ -389,16 +389,12 @@ static int new_poll_in(lua_State *L) {
     luaL_checktype(L, 1, LUA_TTABLE);
 
     int i, N = luaL_len(L, 1);
-    int M = N;
     int K = -1;
 
-    if (lua_type(L, 2) == LUA_TTABLE)
-	M += luaL_len(L, 2);
+    if (lua_type(L, 2) == LUA_TNUMBER)
+	K = luaL_checkinteger(L, 2);
 
-    if (lua_type(L, 3) == LUA_TNUMBER)
-	K = luaL_checkinteger(L, 3);
-
-    zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, M*sizeof(zmq_pollitem_t));
+    zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
 
     for (i=0; i<N;) {
 	pit = it+i;
@@ -410,18 +406,7 @@ static int new_poll_in(lua_State *L) {
 	    lua_pop(L, 1);
     }
 
-    int j = 0;
-    for (;i<M; i++) {
-	pit = it+i;
-	    lua_rawgeti(L, 2, ++j);
-	pit->fd = lua_tointeger(L, -1);
-	    lua_pop(L, 1);
-	pit->revents = 0;
-	pit->events = ZMQ_POLLIN;
-	pit->socket = NULL;
-    }
-
-    int rc = zmq_poll(it, M, K);
+    int rc = zmq_poll(it, N, K);
     zmqError(L, rc, "ERROR: Unable to poll event")
 }
 
@@ -734,7 +719,7 @@ static int mult_part_msg(lua_State *L) {
 }
 
 static int skt_iter_msg(lua_State *L) {
-    checkskt(L);
+    checkskt(L,1);
     int nowait = lua_toboolean(L, 2); // NOWAIT flag
     lua_pushboolean(L, nowait);
     lua_pushcclosure(L, &mult_part_msg, 1);	// iter function + upvalue(NOWAIT flag)

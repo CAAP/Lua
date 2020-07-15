@@ -89,7 +89,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
 //	case MG_EV_CLOSE:
 // return address | error in case of faulty connection to server XXX
 	case MG_EV_CONNECT:
-	    lua_pushboolean(L, *(int *)ev_data); // +1
+	    lua_pushboolean(L, ~*(int *)ev_data); // +1
 	    break;
     }
 //    lua_rotate(L, N+1, 2);
@@ -123,7 +123,7 @@ static int conn_send(lua_State *L) {
     size_t len;
     const char *msg = luaL_checklstring(L, 2, &len);
     int sendclose = lua_toboolean(L, 3);
-    mg_send(c, msg, (int)len);
+    mg_send(c, msg, len);
     if (sendclose)
 	c->flags |= MG_F_SEND_AND_CLOSE;
     lua_pushboolean(L, 1);
@@ -184,7 +184,9 @@ static int mgr_connect(lua_State *L) {
     connect_opts.error_string = &err;
     connect_opts.user_data = (void *)nc;
 
+//    struct mg_connection *c = mg_connect_opt(MGR, &ev_handler, connect_opts, host, NULL, NULL);
     struct mg_connection *c = mg_connect_opt(MGR, host, &ev_handler, connect_opts);
+
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);

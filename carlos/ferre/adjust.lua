@@ -45,19 +45,17 @@ end
 
 -- CACHE sent is the PINS stored for each employee
 -- tabs are only sent once a login succeeds
-local function switch( msg )
-    local cmd = msg[1]
+local function switch( cmd, pid, msg )
     if cmd == 'CACHE' then
-	local fruit = msg[2]
+	local fruit = msg[2]:match'(%a+)' -- %s?
 	return PINS.cache( fruit ) -- returns a table
     end
 
-    local pid = msg[2]:match'pid=(%d+)'
     local ft = FRUITS[pid]
 
     -- short-circuit & re-route the message
     if cmd == 'msgs' and ft then
-	return {ft, msg}
+	return format('%s %s', ft, msg)
 
     -- store new PIN
     elseif cmd == 'pins' then
@@ -65,7 +63,7 @@ local function switch( msg )
 	return msg
 
     elseif cmd == 'login' then
-	local fruit = msg[2]:match'fruit=(%a+)'
+	local fruit = msg:match'fruit=(%a+)'
 	local ret = {}
 	-- guard against double login by sending message to first session & closing it
 	if ft and ft ~= fruit then ret[1] = format('%s logout pid=%d', ft, pid) end
