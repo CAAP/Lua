@@ -56,6 +56,7 @@ local function switch( msg )
 
  -- notification from 'weekdb' of an update returns a 'version' msg
     elseif cmd == 'update' then
+	msg = msg[#msg] -- vers as json
 	return 'version ' .. setVersion(msg)
 
     end
