@@ -1,0 +1,22 @@
+#!/usr/local/bin/lua53
+
+local sql = require'carlos.sqlite'
+local fd = require'carlos.fold'
+local dbconn = require'carlos.ferre'.dbconn
+local asweek = require'carlos.ferre'.asweek
+local aspath = require'carlos.ferre'.aspath
+
+local WEEK = dbconn( asweek(os.time()) )
+
+local QRY = string.format('ATTACH DATABASE %q as FR', aspath'ferre')
+
+assert( WEEK.exec(QRY) )
+
+QRY = 'SELECT * FROM FR.precios WHERE clave IN (SELECT clave FROM updates GROUP BY clave)'
+
+local campos = {'fecha', 'clave', 'desc', 'precio1', 'precio2', 'precio3'}
+
+local function data(o) print(table.concat(fd.reduce(campos, fd.map(function(k) return o[k] or '' end), fd.into, {}), '\t')) end
+
+fd.reduce(WEEK.query(QRY), data)
+

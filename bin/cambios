@@ -4,8 +4,4 @@
 
 ### actual/
 
-pkill -f "app-ferre"
-
-backup
-
-app-ferre
+loscambios
