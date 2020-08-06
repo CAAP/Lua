@@ -56,8 +56,11 @@ local function switch( msg )
     local ft = FRUITS[pid]
 
     -- short-circuit & re-route the message
-    if cmd == 'msgs' and ft then
-	return {ft, msg}
+    if cmd == 'msgs' then
+	if ft then
+	    insert(msg, 1, ft)
+	    return concat(msg, ' ')
+	end
 
     -- store new PIN
     elseif cmd == 'pins' then
