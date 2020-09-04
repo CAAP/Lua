@@ -149,9 +149,17 @@ static int conn_get_flag(lua_State *L) {
 }
 */
 
+/*
 static int conn_get_sock_address(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     lua_pushlightuserdata(L, (void *)&c->sock);
+    return 1;
+}
+*/
+
+static int conn_get_sock_address(lua_State *L) {
+    struct mg_connection *c = checkconn(L);
+    lua_pushfstring(L, "%p", (void *)&c->sock);
     return 1;
 }
 
