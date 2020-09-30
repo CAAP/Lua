@@ -1,15 +1,13 @@
 
 -- Import Section
 --
-local fd	= require'carlos.fold'
-
-local cache	= require'carlos.ferre'.cache
+local asUUID	= require'carlos.ferre.uuids'
+local rconnect	= require'redis'.connect
 
 local format	= string.format
 local insert	= table.insert
 local concat	= table.concat
-local unpack	= table.unpack
-
+local assert	= assert
 local print	= print
 
 -- No more external access after this point
@@ -17,72 +15,63 @@ _ENV = nil -- or M
 
 -- Local Variables for module-only access
 --
-local PINS	 = cache'Hi PINS'
-local TABS	 = cache'Hi TABS'
---TABS.tabs = TABS.store
+local client	= assert( rconnect('127.0.0.1', '6379') )
 
-local FRUITS	 = {}
+local AP	= 'app:active'
+local MM	= 'app:mem:'
+local IDS	= 'app:uuids:'
 
 --------------------------------
 -- Local function definitions --
 --------------------------------
 --
-
-TABS.tabs = function(pid, msg)
-    local ret = TABS.has(pid)
-    if ret then fd.drop(1, msg, fd.into, ret)
-    else TABS.store(pid, msg) end
-end
-
-local function join(w, fruit)
-    if w then
-	local u = { unpack(w) }
-	u[1] = format('%s %s', fruit, w[1])
-	u[#u] = w[#w]..'\n\n'
-	return concat(u, '&query=')
-    end
-end
-
--- CACHE sent is the PINS stored for each employee
--- tabs are only sent once a login succeeds
-local function switch( msg )
-    local cmd = msg[1]:match'%a+'
-    if cmd == 'CACHE' then
-	local fruit = msg[2]
-	return PINS.cache( fruit ) -- returns a table
-    end
-
+local function tabs(cmd, msg)
     local pid = msg[2]:match'pid=(%d+)' or msg[1]:match'pid=(%d+)'
-    local ft = FRUITS[pid]
+    local ft = client:hget(AP, pid)
 
-    -- short-circuit & re-route the message
-    if cmd == 'msgs' then
-	if ft then
-	    insert(msg, 1, ft)
-	    return concat(msg, ' ')
-	end
-
-    -- store new PIN
-    elseif cmd == 'pins' then
-	msg = concat(msg, ' ')
-	PINS.store(pid, msg)
-	return msg
-
-    elseif cmd == 'login' then
+    if cmd == 'login' then
 	local fruit = msg[2]:match'fruit=(%a+)'
 	local ret = {}
 	-- guard against double login by sending message to first session & closing it
-	if ft and ft ~= fruit then ret[1] = format('%s logout pid=%d', ft, pid) end
-	FRUITS[pid] = fruit -- new session opened & saved
-	ret[#ret+1] = join(TABS.has(pid), fruit) -- tabs data, if any
+	if ft and ft ~= fruit then
+	    ret[1] = format('%s logout pid=%d', ft, pid)
+	    client:hdel(AP, ft)
+	end
+	-- in any case
+	client:hset(AP, fruit, pid, pid, fruit) -- new session open
+	print('\n\tSuccessful login for', fruit, '\n')
+	if client:exists(MM..pid) then
+	    ret[#ret+1] = client:hget(MM..pid, 'msgs'):gsub('$FRUIT', fruit)
+	    ret[#ret+1] = client:hget(MM..pid, 'tabs'):gsub('$FRUIT', fruit)
+	end
 	return ret -- returns a table | possibly empty
 
-    else -- tabs, delete
-	TABS[cmd](pid, msg)
-	return 'OK'
+    -- store, short-circuit & re-route the message
+    elseif cmd == 'msgs' then
+	insert(msg, 1, '$FRUIT') -- placeholder for FRUIT
+	insert(msg, '\n\n')
+	client:hset(MM..pid, 'msgs', concat(msg, ' ')) -- store msg
+	if client:hexists(AP, pid) then -- is session open in any client?
+	    return { client:hget(MM..pid, 'msgs'):gsub('$FRUIT', client:hget(AP, pid)) }
+	end
+
+    elseif cmd == 'tabs' then
+	local uuid = asUUID(client, cmd, msg[2])
+	if uuid then
+	    local msg = format('$FRUIT pid=%d&%s\n\n', pid, client:hget(IDS..uuid, 'data'))
+	    client:del(IDS..uuid)
+	    client:hset(MM..pid, 'tabs', msg)
+	    print('\n\tTabs data successfully stored\n')
+	    client:hdel(AP, pid, ft)
+	end
+
+    elseif cmd == 'delete' then
+	client:hdel(MM..pid, 'tabs')
+
+    else
+	print('\nERROR: Unknown command', cmd,'\n')
 
     end
-
 end
 
-return switch
+return tabs
