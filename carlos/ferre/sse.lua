@@ -41,6 +41,7 @@ local function connectme( c )
     c:reply(200, '', ESTREAM)
     c:send('\n\n')
     c:send( ssevent('fruit', fruit) )
+    c:send( ssevent('version', client:get'app:updates:version') )
 end
 
 local function sayoonara( c )

@@ -40,10 +40,9 @@ local function tabs(cmd, msg)
 	-- in any case
 	client:hset(AP, fruit, pid, pid, fruit) -- new session open
 	print('\n\tSuccessful login for', fruit, '\n')
-	if client:exists(MM..pid) then
-	    ret[#ret+1] = client:hget(MM..pid, 'msgs'):gsub('$FRUIT', fruit)
-	    ret[#ret+1] = client:hget(MM..pid, 'tabs'):gsub('$FRUIT', fruit)
-	end
+	local ID = MM..pid
+	if client:hexists(ID, 'msgs') then ret[#ret+1] = client:hget(ID, 'msgs'):gsub('$FRUIT', fruit) end
+	if client:hexists(ID, 'tabs') then ret[#ret+1] = client:hget(ID, 'tabs'):gsub('$FRUIT', fruit) end
 	return ret -- returns a table | possibly empty
 
     -- store, short-circuit & re-route the message
@@ -58,8 +57,8 @@ local function tabs(cmd, msg)
     elseif cmd == 'tabs' then
 	local uuid = asUUID(client, cmd, msg[2])
 	if uuid then
-	    local msg = format('$FRUIT pid=%d&%s\n\n', pid, client:hget(IDS..uuid, 'data'))
-	    client:del(IDS..uuid)
+	    local msg = format('$FRUIT tabs pid=%d&%s\n\n', pid, client:hget(IDS..uuid, 'data'))
+--	    client:del(IDS..uuid) -- XXX expires after 60 secs
 	    client:hset(MM..pid, 'tabs', msg)
 	    print('\n\tTabs data successfully stored\n')
 	    client:hdel(AP, pid, ft)

@@ -3,7 +3,6 @@
 --
 local asnum	= require'carlos.ferre'.asnum
 local newUID	= require'carlos.ferre'.newUID
-local rconnect	= require'redis'.connect
 
 local tointeger = math.tointeger
 local concat	= table.concat
@@ -15,8 +14,6 @@ _ENV = nil -- or M
 
 -- Local Variables for module-only access
 --
-local client	= assert( rconnect('127.0.0.1', '6379') )
-
 local IDS	= 'app:uuids:'
 
 local CACHE	= {}
@@ -31,10 +28,12 @@ local function asUUID(client, cmd, msg)
     local length = tointeger(msg:match'length=(%d+)')
     local size = tointeger(msg:match'size=(%d+)')
     local msg = msg:sub(msg:find'query=', -1) -- leaving only query=ITEM_1&query=ITEM_2&query=ITEM_3...
+    -- XXX urldecode should go here
 
     if uuid then
 	if not(client:exists(IDS..uuid)) then
 	    client:hset(IDS..uuid, 'uid', newUID()..pid, 'cmd', cmd, 'pid', pid)
+	    client:expire(IDS..uuid, 60) -- *VOLATILE*
 	    CACHE[uuid] = {}
 	end
 	local w = CACHE[uuid]
@@ -46,6 +45,7 @@ local function asUUID(client, cmd, msg)
 
     else
 	client:hset(IDS..pid, 'uid', newUID()..pid, 'cmd', cmd, 'pid', pid, 'data', msg)
+	client:expire(IDS..pid, 60) -- *VOLATILE*
 	return pid
 
     end
