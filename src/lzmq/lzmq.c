@@ -55,6 +55,7 @@ void *L_checkudata(lua_State *L, int ud, const char *tname) {
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L,k) *(void **)L_checkudata(L, k, "caap.zmq.socket")
 #define checkkey(L) (cert_t *)luaL_checkudata(L, 1, "caap.zmq.keypair")
+#define checkpoll(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.poller")
 
 extern int errno;
 
@@ -412,29 +413,40 @@ static int new_poll_in(lua_State *L) {
 
 
 // POLLER
+//
 /*
-static int new_pollfd_in(lua_State *L) {
-    luaL_checktype(L, 1, LUA_TTABLE);
+static int new_poller(lua_State *L) {
+    void *poller = (void *)lua_newuserdata(L, sizeof(void));
+    poller = zmq_poller_new();
+    luaL_getmetatable(L, "caap.zmq.poller");
+    lua_setmetatable(L, -2);
+    return 1;
+}
 
-    int i, N = luaL_len(L, 1);
+static int poll_add(lua_State *L) {
+    void *poller = checkpoll(L);
+    void *skt = checkskt(L, 2);
+    short flag = lua_toboolean(L, 3) ? ZMQ_POLLIN : ZMQ_POLLOUT;
 
-    zmq_pollitem_t *pit, *it = (zmq_pollitem_t *)lua_newuserdata(L, N*sizeof(zmq_pollitem_t));
-
-    for (i=0; i<N;) {
-	pit = it+i;
-	    lua_rawgeti(L, 1, ++i);
-	pit->fd = lua_tointeger(L, -1);
-	    lua_pop(L, 1);
-	pit->revents = 0;
-	pit->events = ZMQ_POLLIN;
-	pit->socket = NULL;
+    if (-1 == zmq_poller_add(poller, skt, flag, NULL)) {
     }
 
-    int rc = zmq_poll(it, N, -1);
-    zmqError(L, rc, "ERROR: Unable to poll event")
+    lua_pushboolean(L, 1);
+    return 1;
+};
+
+static int poll_asstr(lua_State *L) {
+    lua_pushstring(L, "zmq{Active Poller}");
+    return 1;
+}
+
+static int poll_gc (lua_State *L) {
+    void *poller = checkpoll(L);
+    if (poller)
+	zmq_poller_destroy(&poller);
+    return 0;
 }
 */
-
 
 // PROXY
 //
@@ -1055,6 +1067,12 @@ static const struct luaL_Reg zmq_funcs[] = {
     {NULL, 	NULL}
 };
 
+static const struct luaL_Reg poll_meths[] = {
+    {"__tostring", poll_asstr},
+    {"__gc",	   poll_gc},
+    {NULL,	   NULL}
+};
+
 static const struct luaL_Reg ctx_meths[] = {
     {"__tostring", ctx_asstr},
     {"__gc",	   ctx_gc},
@@ -1107,6 +1125,11 @@ int luaopen_lzmq (lua_State *L) {
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, key_meths, 0);
+
+    luaL_newmetatable(K, "caap.zmq.poller");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, poll_meths, 0);
 
     // create library
     luaL_newlib(L, zmq_funcs);

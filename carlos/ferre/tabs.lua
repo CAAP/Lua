@@ -58,7 +58,6 @@ local function tabs(cmd, msg)
 	local uuid = asUUID(client, cmd, msg[2])
 	if uuid then
 	    local msg = format('$FRUIT tabs pid=%d&%s\n\n', pid, client:hget(IDS..uuid, 'data'))
---	    client:del(IDS..uuid) -- XXX expires after 60 secs
 	    client:hset(MM..pid, 'tabs', msg)
 	    print('\n\tTabs data successfully stored\n')
 	    client:hdel(AP, pid, ft)
