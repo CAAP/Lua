@@ -12,14 +12,15 @@ static int digestData(lua_State *L, const EVP_MD *md, const char *mssg) {
     unsigned char md_value[EVP_MAX_MD_SIZE];
     unsigned int md_len;
 
-    mdctx = EVP_MD_CTX_create();
+    mdctx = EVP_MD_CTX_new();
     EVP_DigestInit_ex(mdctx, md, NULL);
     // digests the data in mssg string(s)
-    EVP_DigestUpdate(mdctx, mssg, strlen(mssg));
+    EVP_DigestUpdate(mdctx, (const void *)mssg, strlen(mssg));
     // execute hashing function
     EVP_DigestFinal_ex(mdctx, md_value, &md_len);
-    EVP_MD_CTX_destroy(mdctx);
+    EVP_MD_CTX_free(mdctx);
 
+/*
     char c, str[md_len*2], *h = str, lookup[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
     int i;
     for( i=0; i<md_len; i++ ) {
@@ -29,16 +30,11 @@ static int digestData(lua_State *L, const EVP_MD *md, const char *mssg) {
     }
 
     lua_pushlstring(L, str, md_len*2);
+*/
+    lua_pushlstring(L, (const char *)md_value, md_len);
     return 1;
 }
 
-static int encBase64(lua_State *L) {
-    const char *msg = luaL_checkstring(L, 1);
-
-    BIO *64 = NULL, *wbio = NULL;
-
-    return 1;
-}
 
 ///////////////////////////////////
 
@@ -52,7 +48,7 @@ static int getDigest(lua_State *L) {
     const char *dgst = lua_tostring(L, 1);
 
     const EVP_MD *md;
-    EVP_MD **pmd = (EVP_MD **)lua_newuserdata(L, sizeof(EVP_MD *));
+    const EVP_MD **pmd = (const EVP_MD **)lua_newuserdata(L, sizeof(EVP_MD *));
     luaL_getmetatable(L, "caap.openssl.digest");
     lua_setmetatable(L, -2);
 
@@ -85,7 +81,6 @@ static int cleanUp(lua_State *L) {
 
 static const struct luaL_Reg dgst_funcs[] = {
     {"digest", getDigest},
-    {"encode", },
     {NULL, NULL}
 };
 
