@@ -55,7 +55,6 @@ void *L_checkudata(lua_State *L, int ud, const char *tname) {
 #define checkctx(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.context")
 #define checkskt(L,k) *(void **)L_checkudata(L, k, "caap.zmq.socket")
 #define checkkey(L) (cert_t *)luaL_checkudata(L, 1, "caap.zmq.keypair")
-#define checkpoll(L) *(void **)luaL_checkudata(L, 1, "caap.zmq.poller")
 
 extern int errno;
 
@@ -1067,12 +1066,6 @@ static const struct luaL_Reg zmq_funcs[] = {
     {NULL, 	NULL}
 };
 
-static const struct luaL_Reg poll_meths[] = {
-    {"__tostring", poll_asstr},
-    {"__gc",	   poll_gc},
-    {NULL,	   NULL}
-};
-
 static const struct luaL_Reg ctx_meths[] = {
     {"__tostring", ctx_asstr},
     {"__gc",	   ctx_gc},
@@ -1125,11 +1118,6 @@ int luaopen_lzmq (lua_State *L) {
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, key_meths, 0);
-
-    luaL_newmetatable(K, "caap.zmq.poller");
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
-    luaL_setfuncs(L, poll_meths, 0);
 
     // create library
     luaL_newlib(L, zmq_funcs);
