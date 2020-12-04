@@ -16,7 +16,7 @@ dependencies = {
 build = {
     type = "cmake",
     variables = {
-	CMAKE_C_FLAGS	   = "-O2 -fPIC -Wall -pedantic",
+	CMAKE_C_FLAGS	   = "-O2 -fPIC -W -Wall -pedantic -DMG_ENABLE_SSL",
     },
 }
 

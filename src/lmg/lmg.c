@@ -61,6 +61,14 @@ static void http_request(lua_State *L, struct http_message *m) {
 	lua_pushliteral(L, "");
 }
 
+static void http_reply(lua_State *L, struct http_message *m) {
+    struct mg_str *msg = &m->message;
+    if (msg->len > 0)
+	lua_pushlstring(L, msg->p, msg->len);
+    else
+	lua_pushliteral(L, "");
+}
+
 static void wrapper(lua_State *L, struct mg_connection *c) {
     void *p = c->user_data;
     luaL_getmetatable(L, "caap.mg.connection");
@@ -83,13 +91,16 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data) {
 	case MG_EV_HTTP_REQUEST:
 		http_request(L, (struct http_message *)ev_data); // +4
 	    break;
-//	case MG_EV_HTTP_REPLY:
+	case MG_EV_HTTP_REPLY:
+	    	c->flags |= MG_F_CLOSE_IMMEDIATELY;
+	        http_reply(L, (struct http_message *)ev_data); // +1
+	    break;
 //	case MG_EV_RECV:
 /* error in case conection was unexpectedly dropped by server */
 //	case MG_EV_CLOSE:
 // return address | error in case of faulty connection to server XXX
 	case MG_EV_CONNECT:
-	    lua_pushboolean(L, ~*(int *)ev_data); // +1
+		lua_pushboolean(L, ~*(int *)ev_data); // +1
 	    break;
     }
 //    lua_rotate(L, N+1, 2);
@@ -141,22 +152,6 @@ static int conn_recv_buffer(lua_State *L) {
     return 1;
 }
 
-/*
-static int conn_get_flag(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    const int flag = luaL_checkint(L, 2);
-
-}
-*/
-
-/*
-static int conn_get_sock_address(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    lua_pushlightuserdata(L, (void *)&c->sock);
-    return 1;
-}
-*/
-
 static int conn_get_sock_address(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     lua_pushfstring(L, "%p", (void *)&c->sock);
@@ -179,6 +174,44 @@ static int conn_gc(lua_State *L) {
 
 /*   ******************************   */
 
+static int mgr_connect_http(lua_State *L) {
+    const char *host = luaL_checkstring(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+//    const int ssl = lua_toboolean(L, 3);
+
+    struct mg_connection **nc = newconn(L);
+
+    struct mg_connect_opts opts;
+    const char *err;
+    memset(&opts, 0, sizeof(opts));
+	opts.ssl_cert = "cert.pem";
+	opts.ssl_key = "key.pem";
+    opts.error_string = &err;
+    opts.user_data = (void *)nc;
+
+    const char *ex_headers = NULL;
+    const char *post_data = NULL;
+
+    struct mg_connection *c = mg_connect_http_opt(MGR, ev_handler, opts, host, ex_headers, post_data);
+
+    if (c == NULL) {
+	lua_pushnil(L);
+	lua_pushfstring(L, "Error: failed to connect to host %s\t%s\n ", host, err);
+	return 2;
+    }
+    *nc = c;
+
+//    mg_set_protocol_http_websocket(c);
+
+    luaL_getmetatable(L, "caap.mg.connection");
+    lua_pushlightuserdata(L, (void *)nc);
+    lua_pushvalue(L, 2);
+    lua_rawset(L, -3);
+    lua_pop(L, 1);
+
+    return 1;
+}
+
 static int mgr_connect(lua_State *L) {
     const char *host = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -193,7 +226,7 @@ static int mgr_connect(lua_State *L) {
     connect_opts.user_data = (void *)nc;
 
 //    struct mg_connection *c = mg_connect_opt(MGR, &ev_handler, connect_opts, host, NULL, NULL);
-    struct mg_connection *c = mg_connect_opt(MGR, host, &ev_handler, connect_opts);
+    struct mg_connection *c = mg_connect_opt(MGR, host, ev_handler, connect_opts);
 
     if (c == NULL) {
 	lua_pushnil(L);
@@ -224,7 +257,7 @@ static int mgr_bind(lua_State *L) {
     bind_opts.error_string = &err;
     bind_opts.user_data = (void *)nc;
 
-    struct mg_connection *c = mg_bind_opt(MGR, host, &ev_handler, bind_opts);
+    struct mg_connection *c = mg_bind_opt(MGR, host, ev_handler, bind_opts);
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
@@ -331,6 +364,7 @@ static const struct luaL_Reg mgr_meths[] = {
     {"poll",	   mgr_poll},
     {"bind", 	   mgr_bind},
     {"connect",	   mgr_connect},
+    {"connect_http", mgr_connect_http},
     {"iter", 	   mgr_iterator},
     {"__tostring", mgr_asstr},
     {"__gc",	   mgr_gc},

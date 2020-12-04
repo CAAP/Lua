@@ -4569,11 +4569,11 @@ enum mg_ssl_if_result mg_ssl_if_conn_init(
   }
 
   mbuf_init(&ctx->psk, 0);
-  if (mg_ssl_if_ossl_set_psk(ctx, params->psk_identity, params->psk_key) !=
+/*  if (mg_ssl_if_ossl_set_psk(ctx, params->psk_identity, params->psk_key) !=
       MG_SSL_OK) {
     MG_SET_PTRPTR(err_msg, "Invalid PSK settings");
     return MG_SSL_ERROR;
-  }
+  }*/
 
   if (!(nc->flags & MG_F_LISTENING) &&
       (ctx->ssl = SSL_new(ctx->ssl_ctx)) == NULL) {

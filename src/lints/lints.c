@@ -94,7 +94,7 @@ static int b642str(lua_State *L) {
     unsigned char *z  = (unsigned char *)lua_newuserdata(L, M);
     if (-1 == b64_pton(y, z, M)) {
 	lua_pushnil(L);
-	lua_pushliteral(L, "ERROR: b64_ntop encoding base64");
+	lua_pushliteral(L, "ERROR: b64_pton encoding base64");
 	return 2;
     } else
 	lua_pushstring(L, (char *)z);
