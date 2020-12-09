@@ -44,11 +44,14 @@ local function asUUID(client, cmd, msg)
 	    CACHE[uuid] = {}
 	end
 	local w = CACHE[uuid]
+	w[#w+1] = msg
 	if length <= (#w * size) then
-	    client:hset(IDS..uuid, 'data', concat(CACHE[uuid], '&'))
+	    client:hset(IDS..uuid, 'data', concat(w, '&'))
 	    CACHE[uuid] = nil
 	    return uuid
-	else return false end
+	else
+	    return false
+	end
 
     else
 	client:hset(IDS..pid, 'uid', UID(pid), 'cmd', cmd, 'pid', pid, 'data', msg)
