@@ -190,6 +190,12 @@ static int mgr_wsconnect(lua_State *L) {
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
     pu->L = L;
     lua_setuservalue(L, -2);
+
+    luaL_getmetatable(L, "caap.mg.connection");
+    lua_pushvalue(L, 2); // ev_function 4 handler
+    lua_rawsetp(L, -2, (void *)pu);
+    lua_pop(L, 1);
+
     struct mg_connection *c;
     c = mg_ws_connect(MGR, uri, ev_handler, (void *)pu, NULL);
     if (c == NULL) {
@@ -198,11 +204,6 @@ static int mgr_wsconnect(lua_State *L) {
 	return 2;
     }
     *nc = c;
-
-    luaL_getmetatable(L, "caap.mg.connection");
-    lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)pu);
-    lua_pop(L, 1);
 
     return 1;
 }
@@ -216,6 +217,12 @@ static int mgr_bind(lua_State *L) {
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
     pu->L = L;
     lua_setuservalue(L, -2);
+
+    luaL_getmetatable(L, "caap.mg.connection");
+    lua_pushvalue(L, 2); // ev_function 4 handler
+    lua_rawsetp(L, -2, (void *)pu);
+    lua_pop(L, 1);
+
     struct mg_connection *c;
     if (http)
 	c = mg_http_listen(MGR, host, ev_handler, (void *)pu);
@@ -227,11 +234,6 @@ static int mgr_bind(lua_State *L) {
 	return 2;
     }
     *nc = c;
-
-    luaL_getmetatable(L, "caap.mg.connection");
-    lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)pu);
-    lua_pop(L, 1);
 
     return 1;
 }
