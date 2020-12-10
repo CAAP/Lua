@@ -13,6 +13,10 @@ static struct mg_mgr *MGR;
     luaL_getmetatable(L, "caap.mg.connection");\
     lua_setmetatable(L, -2)
 
+typedef struct lmg_udata {
+    lua_State *L;
+} lmg_udata;
+
 // EVENTS
 //
 //  MG_EV_ERROR,     // Error                        char *error_message
@@ -100,21 +104,22 @@ static void http_msg(lua_State *L, struct mg_http_message *m) {
 	lua_pushliteral(L, "");
 }
 
-static void wrapper(lua_State *L, struct mg_connection *c) {
+static void wrapper(lua_State *L, struct mg_connection *c, void *p) {
     luaL_getmetatable(L, "caap.mg.connection");
-    lua_rawgetp(L, -1, c->pfn_data); // handler +1
+    lua_rawgetp(L, -1, p); // handler +1
     luaL_checktype(L, -1, LUA_TFUNCTION);
     lua_replace(L, -2); // replace metatable w handler
     struct mg_connection **pc = newconn(L); // connection +1
     *pc = c;
 }
 
-static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void*fn_data) {
-    lua_State *L = (lua_State *)fn_data;
+static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
+    lmg_udata *pu = (lmg_udata *)fn_data;
+    lua_State *L = pu->L;
     int N = lua_gettop(L);
     struct mg_str *ss;
 
-    wrapper(L, c); // +2   -> hanlder + connection
+    wrapper(L, c, fn_data); // +2   -> hanlder + connection
     lua_pushinteger(L, ev); // +1  -> event
 
     switch(ev) {
@@ -148,27 +153,29 @@ static int mgr_connect(lua_State *L) {
     int http = lua_toboolean(L, 3);
 
     struct mg_connection **nc = newconn(L);
+    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
+    pu->L = L;
+    lua_setuservalue(L, -2);
     struct mg_connection *c;
     if (http) {
-	c = mg_http_connect(MGR, uri, ev_handler, L);
+	c = mg_http_connect(MGR, uri, ev_handler, (void *)pu);
 	if (mg_url_is_ssl(uri)) {
 	    struct mg_tls_opts opts = {.ca = "/etc/ssl/cert.pem"};
 	    mg_tls_init(c, &opts);
 	}
 	mg_printf(c, "GET %s HTTP/1.0\r\n\r\n", mg_url_uri(uri));
     } else
-	c = mg_connect(MGR, uri, ev_handler, L);
+	c = mg_connect(MGR, uri, ev_handler, (void *)pu);
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed connecting to %s\n ", uri);
 	return 2;
     }
-    c->pfn_data = (void *)nc;
     *nc = c;
 
     luaL_getmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)nc);
+    lua_rawsetp(L, -2, (void *)pu);
     lua_pop(L, 1);
 
     return 1;
@@ -179,19 +186,21 @@ static int mgr_wsconnect(lua_State *L) {
     luaL_checktype(L, 2, LUA_TFUNCTION);
 
     struct mg_connection **nc = newconn(L);
+    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
+    pu->L = L;
+    lua_setuservalue(L, -2);
     struct mg_connection *c;
-    c = mg_ws_connect(MGR, uri, ev_handler, L, NULL);
+    c = mg_ws_connect(MGR, uri, ev_handler, (void *)pu, NULL);
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed connecting to %s\n ", uri);
 	return 2;
     }
-    c->pfn_data = (void *)nc;
     *nc = c;
 
     luaL_getmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)nc);
+    lua_rawsetp(L, -2, (void *)pu);
     lua_pop(L, 1);
 
     return 1;
@@ -203,22 +212,24 @@ static int mgr_bind(lua_State *L) {
     int http = lua_toboolean(L, 3);
 
     struct mg_connection **nc = newconn(L);
+    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
+    pu->L = L;
+    lua_setuservalue(L, -2);
     struct mg_connection *c;
     if (http)
-	c = mg_http_listen(MGR, host, ev_handler, L);
+	c = mg_http_listen(MGR, host, ev_handler, (void *)pu);
     else
-	c = mg_listen(MGR, host, ev_handler, L);
+	c = mg_listen(MGR, host, ev_handler, (void *)pu);
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
 	return 2;
     }
-    c->pfn_data = (void *)nc;
     *nc = c;
 
     luaL_getmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)nc);
+    lua_rawsetp(L, -2, (void *)pu);
     lua_pop(L, 1);
 
     return 1;
