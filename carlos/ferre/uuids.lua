@@ -10,7 +10,7 @@ local concat	= table.concat
 local assert	= assert
 local print	= print
 
-local TT	= os.getenv'TIENDA':match'%d+'
+local TT	= os.getenv'TIENDA':match'%d+$'
 
 -- No more external access after this point
 _ENV = nil -- or M
