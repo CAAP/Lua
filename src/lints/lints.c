@@ -92,12 +92,13 @@ static int b642str(lua_State *L) {
     size_t M = 3*N/4 + 1;
 
     unsigned char *z  = (unsigned char *)lua_newuserdata(L, M);
-    if (-1 == b64_pton(y, z, M)) {
+    int len = b64_pton(y, z, M);
+    if (-1 == len) {
 	lua_pushnil(L);
 	lua_pushliteral(L, "ERROR: b64_pton encoding base64");
 	return 2;
     } else
-	lua_pushstring(L, (char *)z);
+	lua_pushlstring(L, (char *)z, len);
 
     return 1;
 }
