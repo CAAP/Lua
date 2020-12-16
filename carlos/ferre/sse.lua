@@ -31,24 +31,23 @@ local events
 
 local function conn2fruit( c )
     local fruit = client:rpoplpush('const:fruits', 'const:fruits')
-    local skt = c:sock()
-    client:hmset(MG, skt, fruit, fruit, skt)
+    c:set_id(fruit)
+    client:sadd(MG, fruit)
     return fruit
 end
 
 local function connectme( c )
-    local fruit = assert( client:hget(MG, c:sock()) )
-    c:reply(200, '', ESTREAM)
-    c:send('\n\n')
+    local fruit = assert( c:id() )
+    c:send(ESTREAM)
+    c:send'\n\n'
     c:send( ssevent('fruit', fruit) )
     c:send( ssevent('version', client:get'app:updates:version') )
 end
 
 local function sayoonara( c )
-    local skt = c:sock()
-    local fruit = assert( client:hget(MG, skt) )
+    local fruit = assert( c:id() )
     local pid = client:hget(AP, fruit) or 'NaP'
-    client:hdel(MG, skt, fruit)
+    client:srem(MG, fruit)
     client:hdel(AP, fruit, pid)
     return fruit
 end
@@ -58,7 +57,7 @@ local function backend(c, ev, ...)
 	local fruit = conn2fruit(c)
 	print('\n+\n\nSSE\tNew fruit:', fruit, '\n')
 
-    elseif ev == events.REQUEST then
+    elseif ev == events.HTTP then
 	connectme(c)
 	print'\tconnection established\n\n+\n'
 
@@ -70,7 +69,7 @@ end
 
 local function init(mgr)
     events = mgr.events
-    return mgr.bind(SSE, backend, 'http'), SSE
+    return mgr.bind('http://localhost:'..SSE, backend, 'http'), SSE
 end
 
 return init
