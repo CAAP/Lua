@@ -28,11 +28,8 @@ typedef struct lmg_udata {
 //  MG_EV_WRITE,     // Data written to socket       int *num_bytes_written
 //  MG_EV_CLOSE,     // Connection closed            NULL
 //  MG_EV_HTTP_MSG,  // HTTP request/response        struct mg_http_message *
-//  MG_EV_WS_OPEN,    // Websocket handshake done     NULL
-//  MG_EV_WS_MSG,     // Websocket message received   struct mg_ws_message *
 //  MG_EV_MQTT_MSG,   // MQTT message                 struct mg_mqtt_message *
 //  MG_EV_MQTT_OPEN,  // MQTT CONNACK received        int *connack_status_code
-//  MG_EV_SNTP_TIME,  // SNTP time received           struct timeval *
 //  MG_EV_USER,       // Starting ID for user events
 //
 //
@@ -66,19 +63,6 @@ typedef struct lmg_udata {
 //};
 //
 
-
-//struct mg_ws_message {
-//  struct mg_str data;
-//  uint8_t flags;  // Websocket message flags
-//};
-
-static void ws_msg(lua_State *L, struct mg_ws_message *m) {
-    struct mg_str *ss = &m->data;
-    lua_pushlstring(L, ss->ptr, ss->len);
-    lua_pushinteger(L, m->flags);
-}
-
-//
 //struct mg_http_message {
 //  //        GET /foo/bar/baz?aa=b&cc=ddd HTTP/1.1
 //  // method |-| |----uri---| |--query--| |proto-|
@@ -134,11 +118,9 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
 	case MG_EV_MQTT_OPEN:
 	    lua_pushinteger(L, *(int *)ev_data); // +1
 	    break;
-	case MG_EV_WS_MSG:
-	    ws_msg(L, (struct mg_ws_message *)ev_data); // +2
-	    break;
 	case MG_EV_ERROR:
 	    lua_pushstring(L, (char *)ev_data); // +1
+
 	    break;
     }
     lua_pcall(L, (lua_gettop(L)-N-1), 0, 0); // in case of ERROR XXX
@@ -172,32 +154,6 @@ static int mgr_connect(lua_State *L) {
 	mg_printf(c, "GET %s HTTP/1.0\r\n\r\n", mg_url_uri(uri));
     } else
 	c = mg_connect(MGR, uri, ev_handler, (void *)pu);
-    if (c == NULL) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "Error: failed connecting to %s\n ", uri);
-	return 2;
-    }
-    *nc = c;
-
-    return 1;
-}
-
-static int mgr_wsconnect(lua_State *L) {
-    const char *uri = luaL_checkstring(L, 1);
-    luaL_checktype(L, 2, LUA_TFUNCTION);
-
-    struct mg_connection **nc = newconn(L);
-    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
-    pu->L = L;
-    lua_setuservalue(L, -2);
-
-    luaL_getmetatable(L, "caap.mg.connection");
-    lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)pu);
-    lua_pop(L, 1);
-
-    struct mg_connection *c;
-    c = mg_ws_connect(MGR, uri, ev_handler, (void *)pu, NULL);
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed connecting to %s\n ", uri);
@@ -290,18 +246,9 @@ static int conn_http_reply(lua_State *L) {
     if (len > 0)  {
 	mg_http_reply(c, code, "%s", msg);
     } else
+
 	mg_http_reply(c, code, NULL, NULL);
 
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-static int conn_ws_send(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    size_t len;
-    const char *msg = luaL_checklstring(L, 2, &len);
-    int op = luaL_checkinteger(L, 3);
-    mg_ws_send(c, msg, len, op);
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -401,24 +348,9 @@ static void set_events(lua_State *L) {
     lua_pushinteger(L, MG_EV_CLOSE); lua_setfield(L, -2, "CLOSE");
     lua_pushinteger(L, MG_EV_ERROR); lua_setfield(L, -2, "ERROR");
     lua_pushinteger(L, MG_EV_HTTP_MSG); lua_setfield(L, -2, "HTTP");
-    lua_pushinteger(L, MG_EV_WS_OPEN); lua_setfield(L, -2, "OPEN");
-    lua_pushinteger(L, MG_EV_WS_MSG); lua_setfield(L, -2, "WS");
     lua_pushinteger(L, MG_EV_USER); lua_setfield(L, -2, "USER");
     lua_setfield(L, -2, "events");
 }
-
-
-static void set_ops(lua_State *L) {
-    lua_newtable(L); // upvalue
-    lua_pushinteger(L, WEBSOCKET_OP_CONTINUE); lua_setfield(L, -2, "continue");
-    lua_pushinteger(L, WEBSOCKET_OP_TEXT); lua_setfield(L, -2, "text");
-    lua_pushinteger(L, WEBSOCKET_OP_BINARY); lua_setfield(L, -2, "binary");
-    lua_pushinteger(L, WEBSOCKET_OP_CLOSE); lua_setfield(L, -2, "close");
-    lua_pushinteger(L, WEBSOCKET_OP_PING); lua_setfield(L, -2, "ping");
-    lua_pushinteger(L, WEBSOCKET_OP_PONG); lua_setfield(L, -2, "pong");
-    lua_setfield(L, -2, "ops");
-}
-
 
 /*   ******************************   */
 
@@ -426,7 +358,6 @@ static const struct luaL_Reg mgr_meths[] = {
     {"poll",	   mgr_poll},
     {"bind", 	   mgr_bind},
     {"connect",	   mgr_connect},
-    {"wconnect",   mgr_wsconnect},
     {"iter", 	   mgr_iterator},
     {"__tostring", mgr_asstr},
     {"__gc",	   mgr_gc},
@@ -438,7 +369,6 @@ static const struct luaL_Reg mgr_meths[] = {
 static const struct luaL_Reg conn_meths[] = {
     {"reply",	    conn_http_reply},
     {"send",	    conn_send},
-    {"wsend",	    conn_ws_send},
     {"drain",	    conn_drain},
     {"close",	    conn_close},
     {"set_id",	    conn_set_label},
@@ -457,7 +387,6 @@ int luaopen_lmg (lua_State *L) {
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, mgr_meths, 0);
     set_events(L);
-    set_ops(L);
 
     luaL_newmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, -1);
