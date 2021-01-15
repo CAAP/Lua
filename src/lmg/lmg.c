@@ -15,6 +15,7 @@ static struct mg_mgr *MGR;
 
 typedef struct lmg_udata {
     lua_State *L;
+    bool done;
 } lmg_udata;
 
 // EVENTS
@@ -28,8 +29,12 @@ typedef struct lmg_udata {
 //  MG_EV_WRITE,     // Data written to socket       int *num_bytes_written
 //  MG_EV_CLOSE,     // Connection closed            NULL
 //  MG_EV_HTTP_MSG,  // HTTP request/response        struct mg_http_message *
-//  MG_EV_MQTT_MSG,   // MQTT message                 struct mg_mqtt_message *
-//  MG_EV_MQTT_OPEN,  // MQTT CONNACK received        int *connack_status_code
+//  MG_EV_MQTT_CMD,   // MQTT command                struct mg_mqtt_message *
+//  MG_EV_MQTT_MSG,   // MQTT message                struct mg_mqtt_message *
+//  MG_EV_MQTT_OPEN,  // MQTT CONNACK received       int *connack_status_code
+//  MG_EV_WS_OPEN,    // Websocket handshake done     NULL
+//  MG_EV_WS_MSG,     // Websocket message received   struct mg_ws_message *
+//  MG_EV_WS_CTL,     // Websocket control message    struct mg_ws_message *
 //  MG_EV_USER,       // Starting ID for user events
 //
 //
@@ -88,6 +93,38 @@ static void http_msg(lua_State *L, struct mg_http_message *m) {
 	lua_pushliteral(L, "");
 }
 
+//
+
+static void mqtt_cmd(lua_State *L, struct mg_mqtt_message *m) {
+    lua_pushinteger(L, m->cmd);
+    lua_replace(L, -2); // replace MG's for MQTT's event
+    struct mg_str *ss;
+    switch(m->cmd) {
+	case MQTT_CMD_SUBSCRIBE:
+	    ss = &m->topic;
+	    lua_pushlstring(L, ss->ptr, ss->len);
+	    break;
+	case MQTT_CMD_PUBLISH:
+	    ss = &m->topic;
+	    lua_pushlstring(L, ss->ptr, ss->len);
+	    ss = &m->data;
+	    lua_pushlstring(L, ss->ptr, ss->len);
+	    break;
+    }
+}
+
+static void mqtt_msg(lua_State *L, struct mg_mqtt_message *m) {
+    struct mg_str *ss = &m->topic;
+    lua_pushlstring(L, ss->ptr, ss->len);
+    ss = &m->data;
+    lua_pushlstring(L, ss->ptr, ss->len);
+}
+
+static void ws_msg(lua_State *L, struct mg_ws_message *m) {
+    struct mg_str *ss = &m->data;
+    lua_pushlstring(L, ss->ptr, ss->len);
+}
+
 static void wrapper(lua_State *L, struct mg_connection *c, void *p) {
     luaL_getmetatable(L, "caap.mg.connection");
     lua_rawgetp(L, -1, p); // handler +1
@@ -110,17 +147,26 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
 	case MG_EV_HTTP_MSG:
 	    http_msg(L, (struct mg_http_message *)ev_data); // +4
 	    break;
+	case MG_EV_MQTT_CMD: // MQTT low-level command
+	    mqtt_msg(L, (struct mg_mqtt_message *)ev_data); // +1,2
+	    break;
+	case MG_EV_MQTT_MSG: // MQTT PUBLISH received
+	    mqtt_msg(L, (struct mg_mqtt_message *)ev_data); // +2
+	    break;
+	case MG_EV_WS_MSG:
+	case MG_EV_WS_CTL:
+	    ws_msg(L, (struct mg_ws_message *)ev_data); // +1
+	    break;
 	case MG_EV_READ:
 	    ss = (struct mg_str *)ev_data;
 	    lua_pushlstring(L, ss->ptr, ss->len); // +1
 	    break;
 	case MG_EV_WRITE:
-	case MG_EV_MQTT_OPEN:
+	case MG_EV_MQTT_OPEN: // MQTT CONNACK received
 	    lua_pushinteger(L, *(int *)ev_data); // +1
 	    break;
 	case MG_EV_ERROR:
 	    lua_pushstring(L, (char *)ev_data); // +1
-
 	    break;
     }
     lua_pcall(L, (lua_gettop(L)-N-1), 0, 0); // in case of ERROR XXX
@@ -132,7 +178,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
 static int mgr_connect(lua_State *L) {
     const char *uri = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
-    int http = lua_toboolean(L, 3);
+    int http = lua_tointeger(L, 3);
 
     struct mg_connection **nc = newconn(L);
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
@@ -146,14 +192,22 @@ static int mgr_connect(lua_State *L) {
 
     struct mg_connection *c;
     if (http) {
-	c = mg_http_connect(MGR, uri, ev_handler, (void *)pu);
+	switch(http) {
+	    case MG_EV_HTTP_MSG: c = mg_http_connect(MGR, uri, ev_handler, (void *)pu); break;
+	    case MG_EV_WS_MSG: c = mg_ws_connect(MGR, uri, ev_handler, (void *)pu, NULL); break;
+	}
+
 	if (mg_url_is_ssl(uri)) {
 	    struct mg_tls_opts opts = {.ca = "/etc/ssl/cert.pem"};
 	    mg_tls_init(c, &opts);
 	}
-	mg_printf(c, "GET %s HTTP/1.0\r\n\r\n", mg_url_uri(uri));
+
+	if (http == MG_EV_HTTP_MSG)
+	    mg_printf(c, "GET %s HTTP/1.0\r\n\r\n", mg_url_uri(uri));
+
     } else
 	c = mg_connect(MGR, uri, ev_handler, (void *)pu);
+
     if (c == NULL) {
 	lua_pushnil(L);
 	lua_pushfstring(L, "Error: failed connecting to %s\n ", uri);
@@ -165,9 +219,9 @@ static int mgr_connect(lua_State *L) {
 }
 
 static int mgr_bind(lua_State *L) {
-    const char *host = luaL_checkstring(L, 1);
+    const char *uri = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
-    int http = lua_toboolean(L, 3);
+    int http = lua_tointeger(L, 3);
 
     struct mg_connection **nc = newconn(L);
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
@@ -180,13 +234,22 @@ static int mgr_bind(lua_State *L) {
     lua_pop(L, 1);
 
     struct mg_connection *c;
-    if (http)
-	c = mg_http_listen(MGR, host, ev_handler, (void *)pu);
-    else
-	c = mg_listen(MGR, host, ev_handler, (void *)pu);
+    if (http) {
+	c = mg_http_listen(MGR, uri, ev_handler, (void *)pu);
+	if (mg_url_is_ssl(uri)) {
+	    struct mg_tls_opts opts = {
+		.ca = "/etc/ssl/cert.pem",
+		.cert = "/etc/ssl/server.pem",
+		.certkey = "/etc/ssl/server.pem"
+	    };
+	    mg_tls_init(c, &opts);
+	}
+    } else
+	c = mg_listen(MGR, uri, ev_handler, (void *)pu);
+
     if (c == NULL) {
 	lua_pushnil(L);
-	lua_pushfstring(L, "Error: failed to create listener on host %s\n ", host);
+	lua_pushfstring(L, "Error: failed to create listener on %s\n ", uri);
 	return 2;
     }
     *nc = c;
@@ -257,7 +320,11 @@ static int conn_send(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     size_t len;
     const char *msg = luaL_checklstring(L, 2, &len);
-    mg_send(c, msg, len);
+    int op = lua_tointeger(L, 3);
+    if (c->is_websocket)
+	mg_ws_send(c, msg, len, op);
+    else
+	mg_send(c, msg, len);
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -293,16 +360,17 @@ static int conn_get_label(lua_State *L) {
 	lua_pushstring(L, c->label);
     return 1;
 }
-/*
-static int conn_is_ready(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    lua_pushboolean(L, c->is_readable | c->is_writable);
-    return 1;
-}
-*/
+
 static int conn_is_done(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     lua_pushboolean(L, c->is_closing);
+    return 1;
+}
+
+static int conn_ip_address(lua_State *L) {
+    struct mg_connection *c = checkconn(L);
+    char ip[100];
+    lua_pushstring(L, mg_straddr(c, ip, sizeof(ip)));
     return 1;
 }
 
@@ -348,8 +416,36 @@ static void set_events(lua_State *L) {
     lua_pushinteger(L, MG_EV_CLOSE); lua_setfield(L, -2, "CLOSE");
     lua_pushinteger(L, MG_EV_ERROR); lua_setfield(L, -2, "ERROR");
     lua_pushinteger(L, MG_EV_HTTP_MSG); lua_setfield(L, -2, "HTTP");
+    lua_pushinteger(L, MG_EV_WS_MSG); lua_setfield(L, -2, "WS");
+    lua_pushinteger(L, MG_EV_WS_OPEN); lua_setfield(L, -2, "OPEN");
     lua_pushinteger(L, MG_EV_USER); lua_setfield(L, -2, "USER");
     lua_setfield(L, -2, "events");
+}
+
+static void set_mqtt_commands(lua_State *L) {
+    lua_newtable(L); // upvalue
+    lua_pushinteger(L, MQTT_CMD_CONNECT); lua_setfield(L, -2, "CONNECT");
+    lua_pushinteger(L, MQTT_CMD_CONNACK); lua_setfield(L, -2, "CONNACK");
+    lua_pushinteger(L, MQTT_CMD_PUBLISH); lua_setfield(L, -2, "PUBLISH");
+    lua_pushinteger(L, MQTT_CMD_PUBACK); lua_setfield(L, -2, "PUBACK");
+    lua_pushinteger(L, MQTT_CMD_PUBREC); lua_setfield(L, -2, "PUBREC");
+    lua_pushinteger(L, MQTT_CMD_PUBREL); lua_setfield(L, -2, "PUBREL");
+    lua_pushinteger(L, MQTT_CMD_PUBCOMP); lua_setfield(L, -2, "PUBCOMP");
+    lua_pushinteger(L, MQTT_CMD_SUBSCRIBE); lua_setfield(L, -2, "SUBSCRIBE");
+    lua_pushinteger(L, MQTT_CMD_SUBACK); lua_setfield(L, -2, "SUBACK");
+    lua_pushinteger(L, MQTT_CMD_UNSUBSCRIBE); lua_setfield(L, -2, "UNSUBSCRIBE");
+    lua_pushinteger(L, MQTT_CMD_UNSUBACK); lua_setfield(L, -2, "UNSUBACK");
+    lua_pushinteger(L, MQTT_CMD_PINGREQ); lua_setfield(L, -2, "PINGREQ");
+    lua_pushinteger(L, MQTT_CMD_PINGRESP); lua_setfield(L, -2, "PINGRESP");
+    lua_pushinteger(L, MQTT_CMD_DISCONNECT); lua_setfield(L, -2, "DISCONNECT");
+    lua_setfield(L, -2, "commands");
+}
+
+static void set_ws_ops(lua_State *L) {
+    lua_newtable(L); // upvalue
+    lua_pushinteger(L, WEBSOCKET_OP_TEXT); lua_setfield(L, -2, "TEXT");
+    lua_pushinteger(L, WEBSOCKET_OP_BINARY); lua_setfield(L, -2, "BINARY");
+    lua_setfield(L, -2, "ops");
 }
 
 /*   ******************************   */
@@ -387,6 +483,8 @@ int luaopen_lmg (lua_State *L) {
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, mgr_meths, 0);
     set_events(L);
+    set_mqtt_commands(L);
+    set_ws_ops(L);
 
     luaL_newmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, -1);
