@@ -15,8 +15,11 @@ static struct mg_mgr *MGR;
 
 typedef struct lmg_udata {
     lua_State *L;
-    bool done;
+    uint8_t flags;
 } lmg_udata;
+
+#define WEBSOCKET 2
+#define SSL 4
 
 // EVENTS
 //
@@ -122,7 +125,9 @@ static void mqtt_msg(lua_State *L, struct mg_mqtt_message *m) {
 
 static void ws_msg(lua_State *L, struct mg_ws_message *m) {
     struct mg_str *ss = &m->data;
+    int f = m->flags & WEBSOCKET_OP_TEXT;
     lua_pushlstring(L, ss->ptr, ss->len);
+    lua_pushinteger(L, f ? WEBSOCKET_OP_TEXT : WEBSOCKET_OP_BINARY);
 }
 
 static void wrapper(lua_State *L, struct mg_connection *c, void *p) {
@@ -144,8 +149,21 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
     lua_pushinteger(L, ev); // +1  -> event
 
     switch(ev) {
+	case MG_EV_ACCEPT:
+	    if (pu->flags & SSL) {
+		struct mg_tls_opts opts = {
+//		    .ca = "/etc/ssl/ca.pem",
+		    .cert = "/etc/ssl/server.pem",
+		    .certkey = "/etc/ssl/server.pem"
+		};
+		mg_tls_init(c, &opts);
+	    }
+	    break;
 	case MG_EV_HTTP_MSG:
-	    http_msg(L, (struct mg_http_message *)ev_data); // +4
+	    if (pu->flags & WEBSOCKET)
+		mg_ws_upgrade(c, (struct mg_http_message *)ev_data);
+	    else
+		http_msg(L, (struct mg_http_message *)ev_data); // +4
 	    break;
 	case MG_EV_MQTT_CMD: // MQTT low-level command
 	    mqtt_msg(L, (struct mg_mqtt_message *)ev_data); // +1,2
@@ -155,7 +173,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
 	    break;
 	case MG_EV_WS_MSG:
 	case MG_EV_WS_CTL:
-	    ws_msg(L, (struct mg_ws_message *)ev_data); // +1
+	    ws_msg(L, (struct mg_ws_message *)ev_data); // +2
 	    break;
 	case MG_EV_READ:
 	    ss = (struct mg_str *)ev_data;
@@ -183,6 +201,7 @@ static int mgr_connect(lua_State *L) {
     struct mg_connection **nc = newconn(L);
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
     pu->L = L;
+    pu->flags = 0;
     lua_setuservalue(L, -2);
 
     luaL_getmetatable(L, "caap.mg.connection");
@@ -198,7 +217,7 @@ static int mgr_connect(lua_State *L) {
 	}
 
 	if (mg_url_is_ssl(uri)) {
-	    struct mg_tls_opts opts = {.ca = "/etc/ssl/cert.pem"};
+	    struct mg_tls_opts opts = {.ca = "/etc/ssl/ca.pem"};
 	    mg_tls_init(c, &opts);
 	}
 
@@ -223,9 +242,13 @@ static int mgr_bind(lua_State *L) {
     luaL_checktype(L, 2, LUA_TFUNCTION);
     int http = lua_tointeger(L, 3);
 
+    uint8_t flags = mg_url_is_ssl(uri) ? SSL : 0;
+    flags = (MG_EV_WS_MSG == http) ? flags|WEBSOCKET : flags;
+
     struct mg_connection **nc = newconn(L);
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
     pu->L = L;
+    pu->flags = flags;
     lua_setuservalue(L, -2);
 
     luaL_getmetatable(L, "caap.mg.connection");
@@ -234,17 +257,9 @@ static int mgr_bind(lua_State *L) {
     lua_pop(L, 1);
 
     struct mg_connection *c;
-    if (http) {
+    if (http)
 	c = mg_http_listen(MGR, uri, ev_handler, (void *)pu);
-	if (mg_url_is_ssl(uri)) {
-	    struct mg_tls_opts opts = {
-		.ca = "/etc/ssl/cert.pem",
-		.cert = "/etc/ssl/server.pem",
-		.certkey = "/etc/ssl/server.pem"
-	    };
-	    mg_tls_init(c, &opts);
-	}
-    } else
+    else
 	c = mg_listen(MGR, uri, ev_handler, (void *)pu);
 
     if (c == NULL) {
@@ -470,6 +485,7 @@ static const struct luaL_Reg conn_meths[] = {
     {"set_id",	    conn_set_label},
     {"id",	    conn_get_label},
     {"done",	    conn_is_done},
+    {"ip", 	    conn_ip_address},
     {"__tostring",  conn_asstr},
     {"__gc",	    conn_gc},
     {NULL,	    NULL}
