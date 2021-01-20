@@ -69,7 +69,7 @@ end
 
 local function init(mgr)
     events = mgr.events
-    return mgr.bind('http://localhost:'..SSE, backend, evs.HTTP), SSE
+    return mgr.bind('http://localhost:'..SSE, backend, events.HTTP), SSE
 end
 
 return init
