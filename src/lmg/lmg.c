@@ -469,7 +469,7 @@ static const struct luaL_Reg mgr_meths[] = {
     {"poll",	   mgr_poll},
     {"bind", 	   mgr_bind},
     {"connect",	   mgr_connect},
-    {"iter", 	   mgr_iterator},
+    {"peers", 	   mgr_iterator},
     {"__tostring", mgr_asstr},
     {"__gc",	   mgr_gc},
     {NULL,	   NULL}
