@@ -300,7 +300,7 @@ static void timer_handler(void *pu) {
 static int mgr_timer(lua_State *L) {
     int mills = luaL_checkinteger(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
-    int flags = 0;
+    int flags = lua_toboolean(L, 3);
 
     struct mg_timer *t = newtimer(L);
     luaL_getmetatable(L, "caap.mg.timer");
@@ -372,14 +372,6 @@ static int timer_asstr(lua_State *L) {
 
 static int timer_gc(lua_State *L) {
     struct mg_timer *t = checktimer(L);
-    if (t != NULL)
-	t = NULL;
-    return 0;
-}
-
-
-static int timer_free(lua_State *L) {
-    struct mg_timer *t = checktimer(L);
     if (t != NULL) {
 	luaL_getmetatable(L, "caap.mg.timer");
 	lua_pushnil(L);
@@ -388,8 +380,7 @@ static int timer_free(lua_State *L) {
 	mg_timer_free(t);
 	t = NULL;
     }
-    lua_pushboolean(L, 1);
-    return 1;
+    return 0;
 }
 
 /*   ******************************   */
@@ -552,9 +543,9 @@ static const struct luaL_Reg mg_funcs[] = {
 /*   ******************************   */
 
 static const struct luaL_Reg timer_meths[] = {
-    {"remove",      timer_free},
     {"__tostring",  timer_asstr},
     {"__gc",	    timer_gc},
+    {"remove",      timer_gc},
     {NULL,	    NULL}
 };
 
