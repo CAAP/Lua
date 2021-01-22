@@ -465,10 +465,9 @@ static int conn_asstr(lua_State *L) {
 }
 
 static int conn_gc(lua_State *L) {
-    struct mg_connection **pc = (struct mg_connection **)luaL_checkudata(L, 1, "caap.mg.connection");
-    if (pc != NULL) {
-	pc = NULL;
-    }
+    struct mg_connection *c = checkconn(L);
+    if (c != NULL)
+	c = NULL;
     return 0;
 }
 
