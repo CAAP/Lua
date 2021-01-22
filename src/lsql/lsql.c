@@ -142,9 +142,14 @@ static int insert (lua_State *L, sqlite3 *conn, sqlite3_stmt *pStmt) {
     return 1;
 }
 
-static int version (lua_State *L) {
-    lua_pushstring(L, sqlite3_libversion());
+static int sqlstr (lua_State *L) {
+    lua_pushfstring(L, "SQLite library %s, thread mode(%d)", sqlite3_libversion(), sqlite3_threadsafe());
     return 1;
+}
+
+static int cleanup (lua_State *L) {
+    sqlite3_shutdown();
+    return 0;
 }
 
 /* ********* CONNECTION ********* */
@@ -467,12 +472,23 @@ static int bind (lua_State *L) {
 }
 */
 
+static void sql_init(lua_State *L) {
+    int code = sqlite3_initialize();
+    sqlite3_mutex *pm = sqlite3_mutex_alloc(SQLITE_MUTEX_FAST);
+    int mutex = (*(uintmax_t *)pm) != 8;
+    sqlite3_mutex_free(pm);
+
+    if ((code != SQLITE_OK) && (sqlite3_threadsafe() == 1) && mutex)
+	luaL_error(L, "ERROR: initializing SQLite library, aborting, %s\n", sqlite3_errstr(code));
+}
+
 static const struct luaL_Reg sql_funcs[] = {
     {"connect", connect},
     {"inmem", inmemory},
     {"temp", temporary},
     {"backup", newBackup},
-    {"version", version},
+    {"__tostring", sqlstr},
+    {"__gc", cleanup},
     {NULL, NULL}
 };
 
@@ -519,7 +535,13 @@ int luaopen_lsql (lua_State *L) {
     luaL_newlib(L, sql_funcs);
 
     // initialize the SQLite library
-    sqlite3_initialize();
+    sql_init(L);
+
+    // metatable for library is itself
+    lua_pushvalue(L, -1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -1, "__index");
+    lua_setmetatable(L, -2);
 
     return 1;
 }

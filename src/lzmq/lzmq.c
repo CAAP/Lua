@@ -1033,7 +1033,6 @@ static int skt_curve_server(lua_State *L) {
     }
 }
 
-
 // // // // // // // // // // // // //
 //
 //  add "socket types" as upvalue to method "socket"

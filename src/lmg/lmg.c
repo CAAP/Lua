@@ -3,9 +3,13 @@
 
 #include "mongoose.h"
 
-static struct mg_mgr *MGR;
+static struct mg_mgr *MGR, MMGR;
 
-#define checkmgr(L) (struct mg_mgr *)luaL_checkudata(L, 1, "caap.mg.mgr")
+#define checktimer(L) (struct mg_timer *)luaL_checkudata(L, 1, "caap.mg.timer")
+
+#define newtimer(L) (struct mg_timer *)lua_newuserdata(L, sizeof(struct mg_timer));\
+    luaL_getmetatable(L, "caap.mg.timer");\
+    lua_setmetatable(L, -2)
 
 #define checkconn(L) *(struct mg_connection **)luaL_checkudata(L, 1, "caap.mg.connection")
 
@@ -132,9 +136,11 @@ static void ws_msg(lua_State *L, struct mg_ws_message *m) {
 
 static void wrapper(lua_State *L, struct mg_connection *c, void *p) {
     luaL_getmetatable(L, "caap.mg.connection");
-    lua_rawgetp(L, -1, p); // handler +1
+    lua_rawgetp(L, -1, p); // userdatum
+    lua_replace(L, -2); // replace metatable w userdatum
+    lua_getuservalue(L, -1); // handler +1
     luaL_checktype(L, -1, LUA_TFUNCTION);
-    lua_replace(L, -2); // replace metatable w handler
+    lua_replace(L, -2); // replace userdatum w handler
     struct mg_connection **pc = newconn(L); // connection +1
     *pc = c;
 }
@@ -198,16 +204,15 @@ static int mgr_connect(lua_State *L) {
     luaL_checktype(L, 2, LUA_TFUNCTION);
     int http = lua_tointeger(L, 3);
 
-    struct mg_connection **nc = newconn(L);
-    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
+    // keep Lua state and function handler on metatable
+    luaL_getmetatable(L, "caap.mg.connection");
+    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
     pu->L = L;
     pu->flags = 0;
-    lua_setuservalue(L, -2);
-
-    luaL_getmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)pu);
-    lua_pop(L, 1);
+    lua_setuservalue(L, -2); // set as uservalue for userdatum
+    lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
+    lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
     if (http) {
@@ -232,10 +237,13 @@ static int mgr_connect(lua_State *L) {
 	lua_pushfstring(L, "Error: failed connecting to %s\n ", uri);
 	return 2;
     }
-    *nc = c;
 
+    struct mg_connection **nc = newconn(L);
+    *nc = c;
     return 1;
 }
+
+/*   ******************************   */
 
 static int mgr_bind(lua_State *L) {
     const char *uri = luaL_checkstring(L, 1);
@@ -245,16 +253,15 @@ static int mgr_bind(lua_State *L) {
     uint8_t flags = mg_url_is_ssl(uri) ? SSL : 0;
     flags = (MG_EV_WS_MSG == http) ? flags|WEBSOCKET : flags;
 
-    struct mg_connection **nc = newconn(L);
-    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata));
-    pu->L = L;
-    pu->flags = flags;
-    lua_setuservalue(L, -2);
-
+    // keep Lua state and function handler on metatable
     luaL_getmetatable(L, "caap.mg.connection");
+    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
+    pu->L = L;
+    pu->flags = 0;
     lua_pushvalue(L, 2); // ev_function 4 handler
-    lua_rawsetp(L, -2, (void *)pu);
-    lua_pop(L, 1);
+    lua_setuservalue(L, -2); // set as uservalue for userdatum
+    lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
+    lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
     if (http)
@@ -267,10 +274,49 @@ static int mgr_bind(lua_State *L) {
 	lua_pushfstring(L, "Error: failed to create listener on %s\n ", uri);
 	return 2;
     }
+
+    struct mg_connection **nc = newconn(L);
     *nc = c;
+    return 1;
+}
+
+/*   ******************************   */
+
+static void timer_handler(void *pu) {
+    lua_State *L = ((lmg_udata *)pu)->L;
+    int N = lua_gettop(L);
+
+    luaL_getmetatable(L, "caap.mg.timer");
+    lua_rawgetp(L, -1, pu); // userdatum
+    lua_replace(L, -2); // replace metatable w userdatum
+    lua_getuservalue(L, -1); // handler +1
+    luaL_checktype(L, -1, LUA_TFUNCTION);
+    lua_replace(L, -2); // replace userdatum w handler
+
+    lua_pcall(L, (lua_gettop(L)-N-1), 0, 0); // in case of ERROR XXX
+    lua_settop(L, N);
+}
+
+static int mgr_timer(lua_State *L) {
+    int mills = luaL_checkinteger(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    int flags = 0;
+
+    struct mg_timer *t = newtimer(L);
+    luaL_getmetatable(L, "caap.mg.timer");
+    lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
+    pu->L = L;
+    lua_pushvalue(L, 2); // timer_function 4 handler
+    lua_setuservalue(L, -2); // set as uservalue for userdatum
+    lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
+    lua_pop(L, 1); // pop metatable
+
+    mg_timer_init(t, mills, flags, timer_handler, (void *)pu);
 
     return 1;
 }
+
+/*   ******************************   */
 
 static int mgr_poll(lua_State *L) {
     int mills = luaL_checkinteger(L, 1);
@@ -278,6 +324,8 @@ static int mgr_poll(lua_State *L) {
     lua_pushboolean(L, 1);
     return 1;
 }
+
+/*   ******************************   */
 
 static int next_connection(lua_State *L) {
     struct mg_connection *c = NULL;
@@ -300,8 +348,10 @@ static int mgr_iterator(lua_State *L) {
     return 3; // iter + state + connection
 }
 
+/*   ******************************   */
+
 static int mgr_asstr(lua_State *L) {
-    lua_pushliteral(L, "Mongoose Event Manager (active)");
+    lua_pushliteral(L, "Mongoose Library, event manager (active)");
     return 1;
 }
 
@@ -313,6 +363,34 @@ static int mgr_gc(lua_State *L) {
     return 0;
 }
 
+/*   ******************************   */
+
+static int timer_asstr(lua_State *L) {
+    lua_pushliteral(L, "Mongoose Library Timer (active)");
+    return 1;
+}
+
+static int timer_gc(lua_State *L) {
+    struct mg_timer *t = checktimer(L);
+    if (t != NULL)
+	t = NULL;
+    return 0;
+}
+
+
+static int timer_free(lua_State *L) {
+    struct mg_timer *t = checktimer(L);
+    if (t != NULL) {
+	luaL_getmetatable(L, "caap.mg.timer");
+	lua_pushnil(L);
+	lua_rawsetp(L, -2, (void *)t);
+	lua_pop(L, 1);
+	mg_timer_free(t);
+	t = NULL;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
 
 /*   ******************************   */
 
@@ -405,22 +483,6 @@ static int conn_gc(lua_State *L) {
 
 /*   ******************************   */
 
-static void lmg_mgr(lua_State *L) {
-    // create a manager
-    struct mg_mgr *mgr = (struct mg_mgr *)lua_newuserdata(L, sizeof(struct mg_mgr));
-    //
-    MGR = mgr;
-    // set its metatable
-    luaL_getmetatable(L, "caap.mg.mgr");
-    lua_setmetatable(L, -2);
-    // create the mongoose mgr, keeping lua_State as userdata
-    mg_mgr_init(mgr);
-}
-
-
-/*   ******************************   */
-
-
 static void set_events(lua_State *L) {
     lua_newtable(L); // upvalue
     lua_pushinteger(L, MG_EV_POLL); lua_setfield(L, -2, "POLL");
@@ -465,14 +527,35 @@ static void set_ws_ops(lua_State *L) {
 
 /*   ******************************   */
 
-static const struct luaL_Reg mgr_meths[] = {
+static void mg_init(lua_State *L) {
+    set_events(L);
+    set_mqtt_commands(L);
+    set_ws_ops(L);
+    // initialize the Event Manager
+    MGR = &MMGR;
+    mg_mgr_init(MGR);
+}
+
+/*   ******************************   */
+
+static const struct luaL_Reg mg_funcs[] = {
     {"poll",	   mgr_poll},
     {"bind", 	   mgr_bind},
     {"connect",	   mgr_connect},
     {"peers", 	   mgr_iterator},
+    {"timer", 	   mgr_timer},
     {"__tostring", mgr_asstr},
     {"__gc",	   mgr_gc},
     {NULL,	   NULL}
+};
+
+/*   ******************************   */
+
+static const struct luaL_Reg timer_meths[] = {
+    {"remove",      timer_free},
+    {"__tostring",  timer_asstr},
+    {"__gc",	    timer_gc},
+    {NULL,	    NULL}
 };
 
 /*   ******************************   */
@@ -494,20 +577,28 @@ static const struct luaL_Reg conn_meths[] = {
 /*   ******************************   */
 
 int luaopen_lmg (lua_State *L) {
-    luaL_newmetatable(L, "caap.mg.mgr");
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
-    luaL_setfuncs(L, mgr_meths, 0);
-    set_events(L);
-    set_mqtt_commands(L);
-    set_ws_ops(L);
 
     luaL_newmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, conn_meths, 0);
 
-    lmg_mgr(L);
+    luaL_newmetatable(L, "caap.mg.timer");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, timer_meths, 0);
+
+    // create library
+    luaL_newlib(L, mg_funcs);
+
+    // initialize the Mongoose library
+    mg_init(L);
+
+    // metatable for library is itself
+    lua_pushvalue(L, -1);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -1, "__index");
+    lua_setmetatable(L, -2);
 
     return 1;
 }
