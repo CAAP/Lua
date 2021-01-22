@@ -257,7 +257,7 @@ static int mgr_bind(lua_State *L) {
     luaL_getmetatable(L, "caap.mg.connection");
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
     pu->L = L;
-    pu->flags = 0;
+    pu->flags = flags;
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
     lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
