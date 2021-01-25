@@ -438,6 +438,7 @@ static void set_conn_opts(lua_State *L) {
     lua_pushinteger(L, 5); lua_setfield(L, -2, "websocket");
     lua_pushinteger(L, 6); lua_setfield(L, -2, "draining");
     lua_pushinteger(L, 7); lua_setfield(L, -2, "closing");
+    lua_pushinteger(L, 8); lua_setfield(L, -2, "label");
     lua_pushcclosure(L, &conn_option, 1);
     lua_setfield(L, -2, "opt");
     lua_pop(L, 1);

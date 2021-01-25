@@ -26,8 +26,6 @@ local pcall	   = pcall
 local pairs	   = pairs
 local concat	   = table.concat
 
-local FRUITS	   = {'apple', 'apricot', 'avocado', 'banana', 'berry', 'cherry', 'coconut', 'cucumber', 'fig', 'grape', 'raisin', 'guava', 'pepper', 'corn', 'plum', 'kiwi', 'lemon', 'lime', 'lychee', 'mango', 'melon', 'olive', 'orange', 'durian', 'longan', 'pea', 'peach', 'pear', 'prune', 'pine', 'pomelo', 'pome', 'quince', 'rhubarb', 'mamey', 'soursop', 'granate', 'sapote'}
-
 -- No more external access after this point
 _ENV = nil -- or M
 
@@ -39,6 +37,12 @@ local DEST	   = ROOT .. '/version.json'
 
 local SEMANA	   = 3600 * 24 * 7
 local QUERY	   = 'SELECT * FROM updates %s'
+
+local DICT	   = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+			A='K', B='L', C='M', D='N', E='O', F='P', G='Q',
+			H='R', I='S', J='T', K='U', L='V', M='W', N='X',
+			O='Y', P='Z', Q='a', R='b', S='c', T='d', U='e',
+			V='f', W='g', X='h', Y='i', Z='j'}
 
 --------------------------------
 -- Local function definitions --
