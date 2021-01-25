@@ -31,13 +31,13 @@ local events
 
 local function conn2fruit( c )
     local fruit = client:rpoplpush('const:fruits', 'const:fruits')
-    c:set_id(fruit)
+    c:opt('label', fruit)
     client:sadd(MG, fruit)
     return fruit
 end
 
 local function connectme( c )
-    local fruit = assert( c:id() )
+    local fruit = assert( c:opt'label' )
     c:send(ESTREAM)
     c:send'\n\n'
     c:send( ssevent('fruit', fruit) )
@@ -45,7 +45,7 @@ local function connectme( c )
 end
 
 local function sayoonara( c )
-    local fruit = assert( c:id() )
+    local fruit = assert( c:opt'label' )
     local pid = client:hget(AP, fruit) or 'NaP'
     client:srem(MG, fruit)
     client:hdel(AP, fruit, pid)

@@ -385,6 +385,64 @@ static int timer_gc(lua_State *L) {
 
 /*   ******************************   */
 
+static int conn_option(lua_State *L) {
+    struct mg_connection *c = checkconn(L);
+    const char *opt = luaL_checkstring(L, 2);
+    int isnum;
+    uint8_t v = lua_tointegerx(L, 3, &isnum);
+    size_t len;
+    const char *lbl = lua_tolstring(L, 3, &len);
+    int k = lua_getfield(L, lua_upvalueindex(1), opt);
+    switch(k) {
+	case 1: lua_pushboolean(L, c->is_listening); break;
+	case 2: lua_pushboolean(L, c->is_client); break;
+	case 3: lua_pushboolean(L, c->is_tls); break;
+	case 4: lua_pushboolean(L, c->is_udp); break;
+	case 5: lua_pushboolean(L, c->is_websocket); break;
+	case 6:
+	    if (isnum) {
+		c->is_draining = v;
+		lua_pushboolean(L, 1);
+	    } else
+		lua_pushboolean(L, c->is_draining);
+	    break;
+	case 7:
+	    if (isnum) {
+		c->is_closing = v;
+		lua_pushboolean(L, 1);
+	    } else
+		lua_pushboolean(L, c->is_closing);
+	    break;
+	case 8:
+	    if (lbl == NULL || len == 0) {
+		if ((c->label) == NULL)
+		    lua_pushnil(L);
+		else
+		    lua_pushstring(L, c->label);
+	    } else {
+		strncpy(c->label, lbl, 32);
+		lua_pushboolean(L, 1);
+	    }
+	    break;
+    }
+    return 1;
+}
+
+static void set_conn_opts(lua_State *L) {
+    luaL_getmetatable(L, "caap.mg.connection");
+    lua_newtable(L);
+    lua_pushinteger(L, 1); lua_setfield(L, -2, "listening");
+    lua_pushinteger(L, 2); lua_setfield(L, -2, "client");
+    lua_pushinteger(L, 3); lua_setfield(L, -2, "tls");
+    lua_pushinteger(L, 4); lua_setfield(L, -2, "udp");
+    lua_pushinteger(L, 5); lua_setfield(L, -2, "websocket");
+    lua_pushinteger(L, 6); lua_setfield(L, -2, "draining");
+    lua_pushinteger(L, 7); lua_setfield(L, -2, "closing");
+    lua_pushcclosure(L, &conn_option, 1);
+    lua_setfield(L, -2, "opt");
+    lua_pop(L, 1);
+}
+
 static int conn_http_reply(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     const int code = luaL_checkinteger(L, 2);
@@ -410,44 +468,6 @@ static int conn_send(lua_State *L) {
     else
 	mg_send(c, msg, len);
     lua_pushboolean(L, 1);
-    return 1;
-}
-
-static int conn_drain(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    c->is_draining = 1;
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-static int conn_close(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    c->is_closing = 1;
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-static int conn_set_label(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    const char *lbl = luaL_checkstring(L, 2);
-    strncpy(c->label, lbl, 32);
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-static int conn_get_label(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    const char *s = c->label;
-    if (s == NULL)
-	lua_pushnil(L);
-    else
-	lua_pushstring(L, c->label);
-    return 1;
-}
-
-static int conn_is_done(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    lua_pushboolean(L, c->is_closing);
     return 1;
 }
 
@@ -553,11 +573,6 @@ static const struct luaL_Reg timer_meths[] = {
 static const struct luaL_Reg conn_meths[] = {
     {"reply",	    conn_http_reply},
     {"send",	    conn_send},
-    {"drain",	    conn_drain},
-    {"close",	    conn_close},
-    {"set_id",	    conn_set_label},
-    {"id",	    conn_get_label},
-    {"done",	    conn_is_done},
     {"ip", 	    conn_ip_address},
     {"__tostring",  conn_asstr},
     {"__gc",	    conn_gc},
@@ -572,6 +587,7 @@ int luaopen_lmg (lua_State *L) {
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, conn_meths, 0);
+    set_conn_opts(L);
 
     luaL_newmetatable(L, "caap.mg.timer");
     lua_pushvalue(L, -1);
@@ -587,7 +603,7 @@ int luaopen_lmg (lua_State *L) {
     // metatable for library is itself
     lua_pushvalue(L, -1);
     lua_pushvalue(L, -1);
-    lua_setfield(L, -1, "__index");
+    lua_setfield(L, -2, "__index");
     lua_setmetatable(L, -2);
 
     return 1;
