@@ -388,10 +388,12 @@ static int timer_gc(lua_State *L) {
 static int conn_option(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     const char *opt = luaL_checkstring(L, 2);
-    int isnum;
+
+    const int N = lua_gettop(L);
+
+    const char *lbl = lua_tostring(L, 3);
     uint8_t v = lua_tointegerx(L, 3, &isnum);
-    size_t len;
-    const char *lbl = lua_tolstring(L, 3, &len);
+
     int k = lua_getfield(L, lua_upvalueindex(1), opt);
     switch(k) {
 	case 1: lua_pushboolean(L, c->is_listening); break;
@@ -407,22 +409,26 @@ static int conn_option(lua_State *L) {
 		lua_pushboolean(L, c->is_draining);
 	    break;
 	case 7:
-	    if (isnum) {
-		c->is_closing = v;
-		lua_pushboolean(L, 1);
-	    } else
+	    if (N == 2)
 		lua_pushboolean(L, c->is_closing);
+	    else {
+		c->is_closing = lua_toboolean(L, 3);
+		lua_pushboolean(L, 1);
+	    }
 	    break;
 	case 8:
-	    if (lbl == NULL || len == 0) {
-		if ((c->label) == NULL)
+	    if (N == 2) {
+		if (strlen(c->label) == 0)
 		    lua_pushnil(L);
 		else
 		    lua_pushstring(L, c->label);
 	    } else {
-		strncpy(c->label, lbl, 32);
+		strncpy(c->label, luaL_checkstring(L, 3), 32);
 		lua_pushboolean(L, 1);
 	    }
+	    break;
+	default :
+	    lua_pushnil(L);
 	    break;
     }
     return 1;
@@ -583,7 +589,6 @@ static const struct luaL_Reg conn_meths[] = {
 /*   ******************************   */
 
 int luaopen_lmg (lua_State *L) {
-
     luaL_newmetatable(L, "caap.mg.connection");
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
