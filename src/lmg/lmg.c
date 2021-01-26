@@ -388,12 +388,7 @@ static int timer_gc(lua_State *L) {
 static int conn_option(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     const char *opt = luaL_checkstring(L, 2);
-
     const int N = lua_gettop(L);
-
-    const char *lbl = lua_tostring(L, 3);
-    uint8_t v = lua_tointegerx(L, 3, &isnum);
-
     int k = lua_getfield(L, lua_upvalueindex(1), opt);
     switch(k) {
 	case 1: lua_pushboolean(L, c->is_listening); break;
@@ -402,11 +397,12 @@ static int conn_option(lua_State *L) {
 	case 4: lua_pushboolean(L, c->is_udp); break;
 	case 5: lua_pushboolean(L, c->is_websocket); break;
 	case 6:
-	    if (isnum) {
-		c->is_draining = v;
-		lua_pushboolean(L, 1);
-	    } else
+	    if (N == 2)
 		lua_pushboolean(L, c->is_draining);
+	    else {
+		c->is_draining = lua_toboolean(L, 3);
+		lua_pushboolean(L, 1);
+	    }
 	    break;
 	case 7:
 	    if (N == 2)
