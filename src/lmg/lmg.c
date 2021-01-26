@@ -22,8 +22,12 @@ typedef struct lmg_udata {
     uint8_t flags;
 } lmg_udata;
 
-#define WEBSOCKET 2
-#define SSL 4
+#define SSL 1
+#define HTTP 2
+#define WEBSOCKET 4
+#define CA 8
+#define CERT 16
+#define CERTKEY 32
 
 // EVENTS
 //
@@ -145,24 +149,30 @@ static void wrapper(lua_State *L, struct mg_connection *c, void *p) {
     *pc = c;
 }
 
+static void set_tls_opts(struct mg_connection *c, uint8_t flags) {
+    struct mg_tls_opts opts;
+    if (flags & CA)
+	opts.ca = "/etc/ssl/ca.pem";
+    if (flags & CERT)
+	opts.cert = "/etc/ssl/cert.pem";
+    if (flags & CERTKEY)
+	opts.certkey = "/etc/ssl/certkey.pem";
+    mg_tls_init(c, &opts);
+}
+
 static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
     lmg_udata *pu = (lmg_udata *)fn_data;
     lua_State *L = pu->L;
     int N = lua_gettop(L);
     struct mg_str *ss;
 
-    wrapper(L, c, fn_data); // +2   -> hanlder + connection
+    wrapper(L, c, &fn_data); // +2   -> hanlder + connection
     lua_pushinteger(L, ev); // +1  -> event
 
     switch(ev) {
 	case MG_EV_ACCEPT:
 	    if (pu->flags & SSL) {
-		struct mg_tls_opts opts = {
-//		    .ca = "/etc/ssl/ca.pem",
-		    .cert = "/etc/ssl/server.pem",
-		    .certkey = "/etc/ssl/server.pem"
-		};
-		mg_tls_init(c, &opts);
+		set_tls_opts(c, pu->flags);
 	    }
 	    break;
 	case MG_EV_HTTP_MSG:
@@ -202,7 +212,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
 static int mgr_connect(lua_State *L) {
     const char *uri = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
-    int http = lua_tointeger(L, 3);
+    const uint8_t flags = luaL_optinteger(L, 3, 0);
 
     // keep Lua state and function handler on metatable
     luaL_getmetatable(L, "caap.mg.connection");
@@ -211,22 +221,20 @@ static int mgr_connect(lua_State *L) {
     pu->flags = 0;
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
-    lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
+    lua_rawsetp(L, -2, (void *)&pu); // set data into metatable, key is the pointer
     lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
-    if (http) {
-	switch(http) {
-	    case MG_EV_HTTP_MSG: c = mg_http_connect(MGR, uri, ev_handler, (void *)pu); break;
-	    case MG_EV_WS_MSG: c = mg_ws_connect(MGR, uri, ev_handler, (void *)pu, NULL); break;
+    if (flags) {
+	switch(flags & (HTTP|WEBSOCKET)) {
+	    case HTTP: c = mg_http_connect(MGR, uri, ev_handler, (void *)pu); break;
+	    case WEBSOCKET: c = mg_ws_connect(MGR, uri, ev_handler, (void *)pu, NULL); break;
 	}
 
-	if (mg_url_is_ssl(uri)) {
-	    struct mg_tls_opts opts = {.ca = "/etc/ssl/ca.pem"};
-	    mg_tls_init(c, &opts);
-	}
+	if (mg_url_is_ssl(uri))
+	    set_tls_opts(c, flags);
 
-	if (http == MG_EV_HTTP_MSG)
+	if (flags & HTTP)
 	    mg_printf(c, "GET %s HTTP/1.0\r\n\r\n", mg_url_uri(uri));
 
     } else
@@ -248,10 +256,10 @@ static int mgr_connect(lua_State *L) {
 static int mgr_bind(lua_State *L) {
     const char *uri = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
-    int http = lua_tointeger(L, 3);
+    uint8_t flags = luaL_optinteger(L, 3, 0);
 
-    uint8_t flags = mg_url_is_ssl(uri) ? SSL : 0;
-    flags = (MG_EV_WS_MSG == http) ? flags|WEBSOCKET : flags;
+    if (mg_url_is_ssl(uri))
+	flags |= SSL;
 
     // keep Lua state and function handler on metatable
     luaL_getmetatable(L, "caap.mg.connection");
@@ -260,11 +268,11 @@ static int mgr_bind(lua_State *L) {
     pu->flags = flags;
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
-    lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
+    lua_rawsetp(L, -2, (void *)&pu); // set data into metatable, key is the pointer
     lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
-    if (http)
+    if (flags & (HTTP|WEBSOCKET))
 	c = mg_http_listen(MGR, uri, ev_handler, (void *)pu);
     else
 	c = mg_listen(MGR, uri, ev_handler, (void *)pu);
@@ -300,7 +308,7 @@ static void timer_handler(void *pu) {
 static int mgr_timer(lua_State *L) {
     int mills = luaL_checkinteger(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
-    int flags = lua_toboolean(L, 3);
+    int flags = lua_toboolean(L, 3); // should be repeated?
 
     struct mg_timer *t = newtimer(L);
     luaL_getmetatable(L, "caap.mg.timer");
@@ -421,7 +429,7 @@ static int conn_option(lua_State *L) {
 		else
 		    lua_pushstring(L, c->label);
 	    } else {
-		strncpy(c->label, luaL_checkstring(L, 3), 32);
+		strncpy(c->label, luaL_optstring(L, 3, ""), 32);
 		lua_pushboolean(L, 1);
 	    }
 	    break;
@@ -456,7 +464,6 @@ static int conn_http_reply(lua_State *L) {
     if (len > 0)  {
 	mg_http_reply(c, code, "%s", msg);
     } else
-
 	mg_http_reply(c, code, NULL, NULL);
 
     lua_pushboolean(L, 1);
@@ -467,7 +474,7 @@ static int conn_send(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     size_t len;
     const char *msg = luaL_checklstring(L, 2, &len);
-    int op = lua_tointeger(L, 3);
+    int op = luaL_optinteger(L, 3, WEBSOCKET_OP_TEXT);
     if (c->is_websocket)
 	mg_ws_send(c, msg, len, op);
     else
@@ -498,22 +505,6 @@ static int conn_gc(lua_State *L) {
 
 /*   ******************************   */
 
-static void set_events(lua_State *L) {
-    lua_newtable(L); // upvalue
-    lua_pushinteger(L, MG_EV_POLL); lua_setfield(L, -2, "POLL");
-    lua_pushinteger(L, MG_EV_ACCEPT); lua_setfield(L, -2, "ACCEPT");
-    lua_pushinteger(L, MG_EV_CONNECT); lua_setfield(L, -2, "CONNECT");
-    lua_pushinteger(L, MG_EV_READ); lua_setfield(L, -2, "READ");
-    lua_pushinteger(L, MG_EV_WRITE); lua_setfield(L, -2, "WRITE");
-    lua_pushinteger(L, MG_EV_CLOSE); lua_setfield(L, -2, "CLOSE");
-    lua_pushinteger(L, MG_EV_ERROR); lua_setfield(L, -2, "ERROR");
-    lua_pushinteger(L, MG_EV_HTTP_MSG); lua_setfield(L, -2, "HTTP");
-    lua_pushinteger(L, MG_EV_WS_MSG); lua_setfield(L, -2, "WS");
-    lua_pushinteger(L, MG_EV_WS_OPEN); lua_setfield(L, -2, "OPEN");
-    lua_pushinteger(L, MG_EV_USER); lua_setfield(L, -2, "USER");
-    lua_setfield(L, -2, "events");
-}
-
 static void set_mqtt_commands(lua_State *L) {
     lua_newtable(L); // upvalue
     lua_pushinteger(L, MQTT_CMD_CONNECT); lua_setfield(L, -2, "CONNECT");
@@ -535,15 +526,36 @@ static void set_mqtt_commands(lua_State *L) {
 
 static void set_ws_ops(lua_State *L) {
     lua_newtable(L); // upvalue
+    // events
+    lua_pushinteger(L, MG_EV_POLL); lua_setfield(L, -2, "POLL");
+    lua_pushinteger(L, MG_EV_ACCEPT); lua_setfield(L, -2, "ACCEPT");
+    lua_pushinteger(L, MG_EV_CONNECT); lua_setfield(L, -2, "CONNECT");
+    lua_pushinteger(L, MG_EV_READ); lua_setfield(L, -2, "READ");
+    lua_pushinteger(L, MG_EV_WRITE); lua_setfield(L, -2, "WRITE");
+    lua_pushinteger(L, MG_EV_CLOSE); lua_setfield(L, -2, "CLOSE");
+    lua_pushinteger(L, MG_EV_ERROR); lua_setfield(L, -2, "ERROR");
+    lua_pushinteger(L, MG_EV_HTTP_MSG); lua_setfield(L, -2, "HTTP");
+    lua_pushinteger(L, MG_EV_WS_MSG); lua_setfield(L, -2, "WS");
+    lua_pushinteger(L, MG_EV_WS_OPEN); lua_setfield(L, -2, "OPEN");
+    lua_pushinteger(L, MG_EV_USER); lua_setfield(L, -2, "USER");
+    // websocket's options
     lua_pushinteger(L, WEBSOCKET_OP_TEXT); lua_setfield(L, -2, "TEXT");
     lua_pushinteger(L, WEBSOCKET_OP_BINARY); lua_setfield(L, -2, "BINARY");
+    // connection's options
+    lua_pushinteger(L, HTTP); lua_setfield(L, -2, "http");
+    lua_pushinteger(L, WEBSOCKET); lua_setfield(L, -2, "websocket");
+    lua_pushinteger(L, SSL); lua_setfield(L, -2, "ssl");
+    lua_pushinteger(L, CA); lua_setfield(L, -2, "ca");
+    lua_pushinteger(L, CERT); lua_setfield(L, -2, "cert");
+    lua_pushinteger(L, CERTKEY); lua_setfield(L, -2, "key");
+    //
     lua_setfield(L, -2, "ops");
 }
 
 /*   ******************************   */
 
 static void mg_init(lua_State *L) {
-    set_events(L);
+//    set_events(L);
     set_mqtt_commands(L);
     set_ws_ops(L);
     // initialize the Event Manager
