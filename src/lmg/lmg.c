@@ -154,9 +154,9 @@ static void set_tls_opts(struct mg_connection *c, uint8_t flags) {
     if (flags & CA)
 	opts.ca = "/etc/ssl/ca.pem";
     if (flags & CERT)
-	opts.cert = "/etc/ssl/cert.pem";
+	opts.cert = "/etc/ssl/server.pem";
     if (flags & CERTKEY)
-	opts.certkey = "/etc/ssl/certkey.pem";
+	opts.certkey = "/etc/ssl/serverkey.pem";
     mg_tls_init(c, &opts);
 }
 
