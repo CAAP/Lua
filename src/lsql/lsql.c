@@ -183,9 +183,11 @@ static int connect (lua_State *L) {
     lua_pushvalue(L, 1); // copy of dbname
     lua_pushcclosure(L, &conn2string, 1);
     lua_setfield(L, -2, "__tostring");
+    //
     lua_pushvalue(L, 1); // copy of dbname
     lua_pushcclosure(L, &conn_readonly, 1);
     lua_setfield(L, -2, "readonly");
+    //
     lua_pop(L, 1); // metatable
 
     return 1;
@@ -518,17 +520,17 @@ static const struct luaL_Reg backup_meths[] = {
 int luaopen_lsql (lua_State *L) {
     luaL_newmetatable(L, "caap.sqlite3.connection");
     lua_pushvalue(L, -1);
-    lua_setfield(L, -1, "__index");
+    lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, conn_meths, 0);
 
     luaL_newmetatable(L, "caap.sqlite3.backup");
     lua_pushvalue(L, -1);
-    lua_setfield(L, -1, "__index");
+    lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, backup_meths, 0);
 
     luaL_newmetatable(L, "caap.sqlite3.statement");
     lua_pushvalue(L, -1);
-    lua_setfield(L, -1, "__index");
+    lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, stmt_meths, 0);
 
     // create library
@@ -540,7 +542,7 @@ int luaopen_lsql (lua_State *L) {
     // metatable for library is itself
     lua_pushvalue(L, -1);
     lua_pushvalue(L, -1);
-    lua_setfield(L, -1, "__index");
+    lua_setfield(L, -2, "__index");
     lua_setmetatable(L, -2);
 
     return 1;

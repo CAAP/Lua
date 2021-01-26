@@ -389,7 +389,9 @@ static int conn_option(lua_State *L) {
     struct mg_connection *c = checkconn(L);
     const char *opt = luaL_checkstring(L, 2);
     const int N = lua_gettop(L);
-    int k = lua_getfield(L, lua_upvalueindex(1), opt);
+    lua_getfield(L, lua_upvalueindex(1), opt); // +1
+    const uint8_t k = lua_tointeger(L, -1);
+    lua_pop(L, 1); // -1
     switch(k) {
 	case 1: lua_pushboolean(L, c->is_listening); break;
 	case 2: lua_pushboolean(L, c->is_client); break;
