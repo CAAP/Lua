@@ -150,7 +150,7 @@ static void wrapper(lua_State *L, struct mg_connection *c, void *p) {
 }
 
 static void set_tls_opts(struct mg_connection *c, uint8_t flags) {
-    struct mg_tls_opts opts;
+    struct mg_tls_opts opts = {.ca = NULL, .cert = NULL, .certkey = NULL};
     if (flags & CA)
 	opts.ca = "/etc/ssl/ca.pem";
     if (flags & CERT)
@@ -166,7 +166,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
     int N = lua_gettop(L);
     struct mg_str *ss;
 
-    wrapper(L, c, &fn_data); // +2   -> hanlder + connection
+    wrapper(L, c, fn_data); // +2   -> hanlder + connection
     lua_pushinteger(L, ev); // +1  -> event
 
     switch(ev) {
@@ -221,7 +221,7 @@ static int mgr_connect(lua_State *L) {
     pu->flags = 0;
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
-    lua_rawsetp(L, -2, (void *)&pu); // set data into metatable, key is the pointer
+    lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
     lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
@@ -268,7 +268,7 @@ static int mgr_bind(lua_State *L) {
     pu->flags = flags;
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
-    lua_rawsetp(L, -2, (void *)&pu); // set data into metatable, key is the pointer
+    lua_rawsetp(L, -2, (void *)pu); // set data into metatable, key is the pointer
     lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;

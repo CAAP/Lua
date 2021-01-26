@@ -22,7 +22,7 @@ local ESTREAM	 = assert( client:get'tcp:sse' )
 local MG	 = 'mgconn:active'
 local AP	 = 'app:active'
 
-local events
+local ops
 
 --------------------------------
 -- Local function definitions --
@@ -53,23 +53,23 @@ local function sayoonara( c )
 end
 
 local function backend(c, ev, ...)
-    if ev == events.ACCEPT then
+    if ev == ops.ACCEPT then
 	local fruit = conn2fruit(c)
 	print('\n+\n\nSSE\tNew fruit:', fruit, '\n')
 
-    elseif ev == events.HTTP then
+    elseif ev == ops.HTTP then
 	connectme(c)
 	print'\tconnection established\n\n+\n'
 
-    elseif ev == events.CLOSE then
+    elseif ev == ops.CLOSE then
 	print('\n+\nSSE\tbye bye', sayoonara(c), '\n+')
 
     end
 end
 
 local function init(mgr)
-    events = mgr.events
-    return mgr.bind('http://0.0.0.0:'..SSE, backend, events.HTTP), SSE
+    ops = mgr.ops
+    return mgr.bind('http://0.0.0.0:'..SSE, backend, ops.http), SSE
 end
 
 return init
