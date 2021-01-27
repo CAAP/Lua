@@ -336,24 +336,30 @@ static int mgr_poll(lua_State *L) {
 /*   ******************************   */
 
 static int next_connection(lua_State *L) {
-    struct mg_connection *c = NULL;
-    if (lua_isuserdata(L, 2))
-	c = (*(struct mg_connection **)lua_touserdata(L, 2))->next;
-    else
-	c = MGR->conns;
-	
+    const int cnt = lua_tointeger(L, 2); // counter
+    struct mg_connection *c = *(struct mg_connection **)lua_touserdata(L, lua_upvalueindex(1)); // connection
     if (c == NULL)
 	return 0;
-    struct mg_connection **pc = newconn(L);
+
+    lua_pushinteger(L, cnt+1); // increment & push counter
+    struct mg_connection **pc = newconn(L); // push connection
     *pc = c;
-    return 1;
+
+    struct mg_connection **nc = newconn(L); // replace upvalue
+    *nc = c->next;
+    lua_replace(L, lua_upvalueindex(1));
+
+    return 2;
 }
 
 static int mgr_iterator(lua_State *L) {
-    lua_pushcclosure(L, next_connection, 0); // iter
-    lua_pushboolean(L, 1);
-    lua_pushnil(L);
-    return 3; // iter + state + connection
+    struct mg_connection *c = MGR->conns; // initial connection
+    struct mg_connection **pc = newconn(L);
+    *pc = c;
+    lua_pushcclosure(L, next_connection, 1); // iter (connection)
+    lua_pushboolean(L, 1); // state
+    lua_pushinteger(L, 0); // initialize counter
+    return 3; // iter (connection) + state + counter
 }
 
 /*   ******************************   */
@@ -406,7 +412,8 @@ static int conn_option(lua_State *L) {
 	case 3: lua_pushboolean(L, c->is_tls); break;
 	case 4: lua_pushboolean(L, c->is_udp); break;
 	case 5: lua_pushboolean(L, c->is_websocket); break;
-	case 6:
+	case 6: lua_pushboolean(L, c->is_accepted); break;
+	case 7:
 	    if (N == 2)
 		lua_pushboolean(L, c->is_draining);
 	    else {
@@ -414,7 +421,7 @@ static int conn_option(lua_State *L) {
 		lua_pushboolean(L, 1);
 	    }
 	    break;
-	case 7:
+	case 8:
 	    if (N == 2)
 		lua_pushboolean(L, c->is_closing);
 	    else {
@@ -422,7 +429,7 @@ static int conn_option(lua_State *L) {
 		lua_pushboolean(L, 1);
 	    }
 	    break;
-	case 8:
+	case 9:
 	    if (N == 2) {
 		if (strlen(c->label) == 0)
 		    lua_pushnil(L);
@@ -448,9 +455,10 @@ static void set_conn_opts(lua_State *L) {
     lua_pushinteger(L, 3); lua_setfield(L, -2, "tls");
     lua_pushinteger(L, 4); lua_setfield(L, -2, "udp");
     lua_pushinteger(L, 5); lua_setfield(L, -2, "websocket");
-    lua_pushinteger(L, 6); lua_setfield(L, -2, "draining");
-    lua_pushinteger(L, 7); lua_setfield(L, -2, "closing");
-    lua_pushinteger(L, 8); lua_setfield(L, -2, "label");
+    lua_pushinteger(L, 6); lua_setfield(L, -2, "accepted");
+    lua_pushinteger(L, 7); lua_setfield(L, -2, "draining");
+    lua_pushinteger(L, 8); lua_setfield(L, -2, "closing");
+    lua_pushinteger(L, 9); lua_setfield(L, -2, "label");
     lua_pushcclosure(L, &conn_option, 1);
     lua_setfield(L, -2, "opt");
     lua_pop(L, 1);
