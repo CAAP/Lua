@@ -3,6 +3,8 @@
 
 #include "mongoose.h"
 #include <uuid.h>
+#include <netinet/in.h>
+#include <resolv.h>
 
 static struct mg_mgr *MGR, MMGR;
 
@@ -21,15 +23,8 @@ static uuid_t *UUID, UID;
 typedef struct lmg_udata {
     lua_State *L;
     uint8_t flags;
-    uint8_t uuid[16]; // Variant 1, big-endian encoded, as 16 bytes
+    char uuid[25];
 } lmg_udata;
-
-#define SSL 1
-#define HTTP 2
-#define WEBSOCKET 4
-#define CA 8
-#define CERT 16
-#define CERTKEY 32
 
 static void init_uuid(lua_State *L) {
     uint32_t rc;
@@ -38,14 +33,27 @@ static void init_uuid(lua_State *L) {
 	luaL_error(L, "error while computing UUID");
 }
 
-static void uuid_as_octet(lua_State *L, uint8_t *octet) {
+static void uuid_as_str(lua_State *L, char *uuid) {
     uint32_t rc;
+    uint8_t octet[16];
+    size_t N = 16, M = 25;
+
     uuid_create(UUID, &rc);
     if (rc != uuid_s_ok)
 	luaL_error(L, "error while computing UUID");
 
     uuid_enc_be((void *)octet, UUID);
+
+    if (-1 == b64_ntop(octet, N, uuid, M))
+	luaL_error(L, "error while converting to base64");
 }
+
+#define SSL 1
+#define HTTP 2
+#define WEBSOCKET 4
+#define CA 8
+#define CERT 16
+#define CERTKEY 32
 
 // EVENTS
 //
@@ -156,9 +164,10 @@ static void ws_msg(lua_State *L, struct mg_ws_message *m) {
     lua_pushinteger(L, f ? WEBSOCKET_OP_TEXT : WEBSOCKET_OP_BINARY);
 }
 
-static void wrapper(lua_State *L, struct mg_connection *c, void *p) {
+static void wrapper(lua_State *L, struct mg_connection *c, const char *uuid) {
     luaL_getmetatable(L, "caap.mg.connection");
-    lua_rawgetp(L, -1, p); // userdatum
+    lua_getfield(L, -1, uuid); // userdatum
+//    lua_rawgetp(L, -1, p); // userdatum
     lua_replace(L, -2); // replace metatable w userdatum
     lua_getuservalue(L, -1); // handler +1
     luaL_checktype(L, -1, LUA_TFUNCTION);
@@ -183,7 +192,6 @@ static void ev_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
     lua_State *L = pu->L;
     int N = lua_gettop(L);
     struct mg_str *ss;
-
     wrapper(L, c, pu->uuid); // +2   -> hanlder + connection
     lua_pushinteger(L, ev); // +1  -> event
 
@@ -237,10 +245,11 @@ static int mgr_connect(lua_State *L) {
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
     pu->L = L;
     pu->flags = 0;
-    uuid_as_octet(L, pu->uuid);
+    uuid_as_str(L, pu->uuid);
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
-    lua_rawsetp(L, -2, (void *)pu->uuid); // set data into metatable, key is uuid octet
+    lua_setfield(L, -2, pu->uuid); // set data into metatable, key is uuid
+//    lua_rawsetp(L, -2, pu->uuid); // set data into metatable, key is uuid
     lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
@@ -288,10 +297,11 @@ static int mgr_bind(lua_State *L) {
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
     pu->L = L;
     pu->flags = flags;
-    uuid_as_octet(L, pu->uuid);
+    uuid_as_str(L, pu->uuid);
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
-    lua_rawsetp(L, -2, (void *)pu->uuid); // set data into metatable, key is uuid octet
+    lua_setfield(L, -2, pu->uuid); // set data into metatable, key is uuid
+//    lua_rawsetp(L, -2, pu->uuid); // set data into metatable, key is uuid
     lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
@@ -313,12 +323,14 @@ static int mgr_bind(lua_State *L) {
 
 /*   ******************************   */
 
-static void timer_handler(void *pu) {
-    lua_State *L = ((lmg_udata *)pu)->L;
+static void timer_handler(void *data) {
+    lmg_udata *pu = (lmg_udata *)data;
+    lua_State *L = pu->L;
     int N = lua_gettop(L);
 
     luaL_getmetatable(L, "caap.mg.timer");
-    lua_rawgetp(L, -1, pu); // userdatum
+    lua_getfield(L, -1, pu->uuid); // userdatum
+//    lua_rawgetp(L, -1, pu->uuid); // userdatum
     lua_replace(L, -2); // replace metatable w userdatum
     lua_getuservalue(L, -1); // handler +1
     luaL_checktype(L, -1, LUA_TFUNCTION);
@@ -337,10 +349,12 @@ static int mgr_timer(lua_State *L) {
     luaL_getmetatable(L, "caap.mg.timer");
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
     pu->L = L;
-    uuid_as_octet(L, pu->uuid);
+    pu->flags = 0;
+    uuid_as_str(L, pu->uuid);
     lua_pushvalue(L, 2); // timer_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
-    lua_rawsetp(L, -2, (void *)pu->uuid); // set data into metatable, key is uuid octet
+    lua_setfield(L, -2, pu->uuid); // set data into metatable, key is uuid
+//    lua_rawsetp(L, -2, pu->uuid); // set data into metatable, key is uuid
     lua_pop(L, 1); // pop metatable
 
     mg_timer_init(t, mills, flags, timer_handler, (void *)pu);
@@ -592,7 +606,7 @@ static void mg_init(lua_State *L) {
     // initialize the Event Manager
     MGR = &MMGR;
     mg_mgr_init(MGR);
-    // initialize the UUID
+    // initialize the Event Manager
     UUID = &UID;
     init_uuid(L);
 }

@@ -1,9 +1,6 @@
 #include <lua.h>
 #include <lauxlib.h>
 
-#include <netinet/in.h>
-#include <resolv.h>
-
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -70,39 +67,6 @@ static int frombase64(lua_State *L) {
     return 1;
 }
 
-static int str2b64(lua_State *L) {
-    size_t N;
-    const unsigned char *y = (unsigned char *)luaL_checklstring(L, 1, &N);
-    size_t M = 4*(N/3+1)+1;
-
-    char *z  = (char *)lua_newuserdata(L, M);
-    if (-1 == b64_ntop(y, N, z, M)) {
-	lua_pushnil(L);
-	lua_pushliteral(L, "ERROR: b64_ntop encoding base64");
-	return 2;
-    } else
-	lua_pushstring(L, z);
-
-    return 1;
-}
-
-static int b642str(lua_State *L) {
-    size_t N;
-    const char *y = luaL_checklstring(L, 1, &N);
-    size_t M = 3*N/4 + 1;
-
-    unsigned char *z  = (unsigned char *)lua_newuserdata(L, M);
-    int len = b64_pton(y, z, M);
-    if (-1 == len) {
-	lua_pushnil(L);
-	lua_pushliteral(L, "ERROR: b64_pton encoding base64");
-	return 2;
-    } else
-	lua_pushlstring(L, (char *)z, len);
-
-    return 1;
-}
-
 //////
 static int tohex(lua_State *L) {
     size_t N;
@@ -145,8 +109,6 @@ static const struct luaL_Reg dgst_funcs[] = {
     {"castU32", cast_uint32},
     {"tob64",	tobase64},
     {"getB64",	frombase64},
-    {"asB64", 	str2b64},
-    {"fromB64", b642str},
     {"hex",	tohex},
     {"phex",	str2hex},
     {NULL, NULL}
