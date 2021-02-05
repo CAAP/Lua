@@ -258,8 +258,6 @@ static int mgr_connect(lua_State *L) {
 	    case HTTP: c = mg_http_connect(MGR, uri, ev_handler, (void *)pu); break;
 	    case WEBSOCKET: c = mg_ws_connect(MGR, uri, ev_handler, (void *)pu, NULL); break;
 	}
-	if (c == NULL)
-	    goto CERROR;
 
 	if (mg_url_is_ssl(uri))
 	    set_tls_opts(c, flags);
@@ -269,13 +267,6 @@ static int mgr_connect(lua_State *L) {
 
     } else
 	c = mg_connect(MGR, uri, ev_handler, (void *)pu);
-
-    CERROR:
-    if (c == NULL) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "Error: failed connecting to %s\n ", uri);
-	return 2;
-    }
 
     struct mg_connection **nc = newconn(L);
     *nc = c;
@@ -309,12 +300,6 @@ static int mgr_bind(lua_State *L) {
 	c = mg_http_listen(MGR, uri, ev_handler, (void *)pu);
     else
 	c = mg_listen(MGR, uri, ev_handler, (void *)pu);
-
-    if (c == NULL) {
-	lua_pushnil(L);
-	lua_pushfstring(L, "Error: failed to create listener on %s\n ", uri);
-	return 2;
-    }
 
     struct mg_connection **nc = newconn(L);
     *nc = c;
@@ -424,11 +409,19 @@ static int timer_asstr(lua_State *L) {
 
 static int timer_gc(lua_State *L) {
     struct mg_timer *t = checktimer(L);
+    if (t != NULL)
+	t = NULL;
+    return 0;
+}
+
+static int timer_free(lua_State *L) {
+    struct mg_timer *t = checktimer(L);
     if (t != NULL) {
-/*	luaL_getmetatable(L, "caap.mg.timer");
+	lmg_udata *pu = (lmg_udata *)t->arg;
+	luaL_getmetatable(L, "caap.mg.timer"); // +1
 	lua_pushnil(L);
-	lua_rawsetp(L, -2, (void *)t->uuid);
-	lua_pop(L, 1);*/
+	lua_setfield(L, -2, pu->uuid);
+	lua_pop(L, 1); // -1
 	mg_timer_free(t);
 	t = NULL;
     }
@@ -537,7 +530,7 @@ static int conn_ip_address(lua_State *L) {
 
 static int conn_asstr(lua_State *L) {
     struct mg_connection *c = checkconn(L);
-    lua_pushfstring(L, "Mongoose Connection (%p)", c->pfn_data);
+    lua_pushfstring(L, "Mongoose Connection (%s)", ((lmg_udata *)c->fn_data)->uuid);
     return 1;
 }
 
@@ -629,7 +622,7 @@ static const struct luaL_Reg mg_funcs[] = {
 static const struct luaL_Reg timer_meths[] = {
     {"__tostring",  timer_asstr},
     {"__gc",	    timer_gc},
-    {"remove",      timer_gc},
+    {"remove",      timer_free},
     {NULL,	    NULL}
 };
 
