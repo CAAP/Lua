@@ -126,6 +126,8 @@ local function connect( dbname )
 
     function MM.info() return tostring(conn) end
 
+    function MM.maxu() return conn:maxu() end
+
     function MM.close()
 	conn:close()
 	MM = nil

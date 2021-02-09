@@ -15,6 +15,8 @@
 
 static uuid_t *UUID, UID;
 
+static const size_t UUID_SIZE = 25, OCTET_SIZE = 16;
+
 #define checkuuid(L, k) (uint8_t *)luaL_checkudata(L, k, "caap.bsd.uuid")
 
 // // // // // // // // //
@@ -23,16 +25,28 @@ static uuid_t *UUID, UID;
 //		  UUID	  	      //
 /*   ******************************   */
 
-static void init_uuid(lua_State *L) {
+static int uuid_nil(uint8_t *octet) {
     uint32_t rc;
     uuid_create_nil(UUID, &rc);
+
     if (rc != uuid_s_ok)
-	luaL_error(L, "error while computing UUID");
+	return -1;
+
+    uuid_enc_be((void *)octet, UUID);
+    return 0;
+}
+
+static void init_uuid(lua_State *L) {
+    UUID = &UID;
+    uint8_t octet[16];
+    if (uuid_nil(octet) == -1)
+	luaL_error(L, "error while computing inital UUID"); // XXX
 }
 
 static int uuid_as_octet(uint8_t *octet) {
     uint32_t rc;
     uuid_create(UUID, &rc);
+
     if (rc != uuid_s_ok)
 	return -1;
 
@@ -54,16 +68,14 @@ static int32_t uuid_compare_octet(uint8_t *x, uint8_t *y) {
 }
 
 static int octet_as_b64(uint8_t *octet, char *uuid) {
-    size_t N = 16, M = 25;
-
-    if (-1 == b64_ntop(octet, N, uuid, M))
+    if (-1 == b64_ntop(octet, OCTET_SIZE, uuid, UUID_SIZE))
 	return -1;
 
     return 0;
 }
 
 static int new_uuid(lua_State *L) {
-    uint8_t *octet = (uint8_t *)lua_newuserdata(L, 16*sizeof(uint8_t));
+    uint8_t *octet = (uint8_t *)lua_newuserdata(L, OCTET_SIZE);
     if (octet == NULL) {
 	lua_pushnil(L);
 	lua_pushliteral(L, "error while creating userdata for uuid");
@@ -258,8 +270,7 @@ int luaopen_lbsd (lua_State *L) {
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, uuid_meths, 0);
 
-    // check uuid library is up and running
-    UUID = &UID;
+    // initialize & check, uuid library is up and running
     init_uuid(L);
 
     // create library

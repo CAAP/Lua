@@ -653,10 +653,17 @@ static int skt_option(lua_State *L) {
 // CONTEXT
 //
 
-static void init_context(lua_State *L) {
-    if (NULL == (CTX = zmq_ctx_new()))
-	luaL_error(L, "fatal error creating ZMQ contexa, should abort\n");
+static int ctx_gc (lua_State *L) {
+    if (CTX && (zmq_ctx_term(CTX) == 0))
+	CTX = NULL;
+    return 0;
 }
+
+static int ctx_asstr (lua_State *L) {
+    lua_pushliteral(L, "ZeroMQ library, context (active)");
+    return 1;
+}
+
 
 static int new_socket(lua_State *L) {
     const char* ttype = luaL_checkstring(L, 1);
@@ -675,12 +682,6 @@ static int new_socket(lua_State *L) {
     zmqError(L, *pskt == NULL, "Error creating ZMQ socket");
 
     return 1;
-}
-
-static int ctx_gc (lua_State *L) {
-    if (CTX && (zmq_ctx_term(CTX) == 0))
-	CTX = NULL;
-    return 0;
 }
 
 static int ctx_int_opt(lua_State *L, const int N, const uint8_t opt) {
@@ -725,6 +726,13 @@ static void context_opt_func(lua_State *L) {
     lua_pushinteger(L, ZMQ_MAX_SOCKETS);  lua_setfield(L, -2, "sockets");
     lua_pushcclosure(L, &ctx_option, 1);
     lua_setfield(L, -2, "opt");
+}
+
+/*   ******************************   */
+
+static void init_context(lua_State *L) {
+    if (NULL == (CTX = zmq_ctx_new()))
+	luaL_error(L, "fatal error creating ZMQ contexa, should abort\n");
 }
 
 /*   ******************************   */
@@ -782,12 +790,17 @@ static void socket_opt_func(lua_State *L) {
 
 // // // // // // // // // // // // //
 
+static const struct luaL_Reg zmq_meths[] = {
+    {"__tostring", ctx_asstr},
+    {"__gc", 	   ctx_gc},
+    {NULL, 	   NULL}
+};
+
 static const struct luaL_Reg zmq_funcs[] = {
-    {"proxy",   new_proxy},
-    {"pollin",  new_poll_in},
-    {"keypair", new_keypair},
-    {"__gc", 	ctx_gc},
-    {NULL, 	NULL}
+    {"proxy",	   new_proxy},
+    {"pollin", 	   new_poll_in},
+    {"keypair",    new_keypair},
+    {NULL,	   NULL}
 };
 
 static const struct luaL_Reg key_meths[] = {
@@ -799,6 +812,12 @@ static const struct luaL_Reg key_meths[] = {
 };
 
 static const struct luaL_Reg skt_meths[] = {
+    {"__gc", 	   skt_gc},
+    {"__tostring", skt_asstr},
+    {NULL,	   NULL}
+};
+
+static const struct luaL_Reg skt_funcs[] = {
     {"bind",	   skt_bind},
     {"unbind",	   skt_unbind},
     {"connect",	   skt_connect},
@@ -810,9 +829,6 @@ static const struct luaL_Reg skt_meths[] = {
     {"msgs",	   skt_iter_msg},
     {"server", 	   skt_curve_server},
     {"client", 	   skt_curve_client},
-    //
-    {"__gc", 	   skt_gc},
-    {"__tostring", skt_asstr},
     {NULL,	   NULL}
 };
 
@@ -820,7 +836,7 @@ static const struct luaL_Reg skt_meths[] = {
 
 int luaopen_lzmq (lua_State *L) {
     luaL_newmetatable(L, "caap.zmq.socket");
-    lua_pushvalue(L, -1);
+    luaL_newlib(L, skt_funcs);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, skt_meths, 0);
     socket_opt_func(L);
@@ -830,18 +846,20 @@ int luaopen_lzmq (lua_State *L) {
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, key_meths, 0);
 
+    // initialize ZeroMQ Context and store reference
+    init_context(L);
+
     // create library
     luaL_newlib(L, zmq_funcs);
+
+    // metatable for library: close & release resources
+    luaL_newmetatable(L, "caap.zmq.library");
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, zmq_meths, 0);
     socket_new_func(L);
     context_opt_func(L);
 
-    // initialize context and store reference
-    init_context(L);
-
-    // metatable for library is itself
-    lua_pushvalue(L, -1);
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
     lua_setmetatable(L, -2);
 
     return 1;

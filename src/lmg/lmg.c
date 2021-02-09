@@ -240,8 +240,8 @@ static int mgr_connect(lua_State *L) {
     luaL_checktype(L, 2, LUA_TFUNCTION);
     const uint8_t flags = luaL_optinteger(L, 3, 0);
 
-    // keep Lua state and function handler on metatable
-    luaL_getmetatable(L, "caap.mg.connection");
+    // CONNECTION METATABLE: push userdata, Lua state & function handler
+    luaL_getmetatable(L, "caap.mg.connection"); // +1
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
     pu->L = L;
     pu->flags = 0;
@@ -249,8 +249,7 @@ static int mgr_connect(lua_State *L) {
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
     lua_setfield(L, -2, pu->uuid); // set data into metatable, key is uuid
-//    lua_rawsetp(L, -2, pu->uuid); // set data into metatable, key is uuid
-    lua_pop(L, 1); // pop metatable
+    lua_pop(L, 1); // pop metatable; -1
 
     struct mg_connection *c;
     if (flags) {
@@ -269,6 +268,8 @@ static int mgr_connect(lua_State *L) {
 	c = mg_connect(MGR, uri, ev_handler, (void *)pu);
 
     struct mg_connection **nc = newconn(L);
+    lua_pushinteger(L, c->id); // used by asstr method
+    lua_setuservalue(L, -2);
     *nc = c;
     return 1;
 }
@@ -283,7 +284,7 @@ static int mgr_bind(lua_State *L) {
     if (mg_url_is_ssl(uri))
 	flags |= SSL;
 
-    // keep Lua state and function handler on metatable
+    // CONNECTION METATABLE: push userdata, Lua state & function handler
     luaL_getmetatable(L, "caap.mg.connection");
     lmg_udata *pu = (lmg_udata *)lua_newuserdata(L, sizeof(lmg_udata)); // Lua state
     pu->L = L;
@@ -292,7 +293,6 @@ static int mgr_bind(lua_State *L) {
     lua_pushvalue(L, 2); // ev_function 4 handler
     lua_setuservalue(L, -2); // set as uservalue for userdatum
     lua_setfield(L, -2, pu->uuid); // set data into metatable, key is uuid
-//    lua_rawsetp(L, -2, pu->uuid); // set data into metatable, key is uuid
     lua_pop(L, 1); // pop metatable
 
     struct mg_connection *c;
@@ -302,6 +302,8 @@ static int mgr_bind(lua_State *L) {
 	c = mg_listen(MGR, uri, ev_handler, (void *)pu);
 
     struct mg_connection **nc = newconn(L);
+    lua_pushinteger(L, c->id); // used by asstr method
+    lua_setuservalue(L, -2);
     *nc = c;
     return 1;
 }
@@ -529,8 +531,10 @@ static int conn_ip_address(lua_State *L) {
 }
 
 static int conn_asstr(lua_State *L) {
-    struct mg_connection *c = checkconn(L);
-    lua_pushfstring(L, "Mongoose Connection (%s)", ((lmg_udata *)c->fn_data)->uuid);
+    checkconn(L);
+    lua_getuservalue(L, 1);
+    lua_pushfstring(L, "Mongoose Connection (%d)", lua_tointeger(L, -1));
+    lua_replace(L, -2);
     return 1;
 }
 
@@ -593,9 +597,6 @@ static void set_ws_ops(lua_State *L) {
 /*   ******************************   */
 
 static void mg_init(lua_State *L) {
-//    set_events(L);
-    set_mqtt_commands(L);
-    set_ws_ops(L);
     // initialize the Event Manager
     MGR = &MMGR;
     mg_mgr_init(MGR);
@@ -606,14 +607,18 @@ static void mg_init(lua_State *L) {
 
 /*   ******************************   */
 
+static const struct luaL_Reg mg_meths[] = {
+    {"__tostring", mgr_asstr},
+    {"__gc",	   mgr_gc},
+    {NULL,	   NULL}
+};
+
 static const struct luaL_Reg mg_funcs[] = {
     {"poll",	   mgr_poll},
     {"bind", 	   mgr_bind},
     {"connect",	   mgr_connect},
     {"peers", 	   mgr_iterator},
     {"timer", 	   mgr_timer},
-    {"__tostring", mgr_asstr},
-    {"__gc",	   mgr_gc},
     {NULL,	   NULL}
 };
 
@@ -651,16 +656,20 @@ int luaopen_lmg (lua_State *L) {
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, timer_meths, 0);
 
-    // create library
-    luaL_newlib(L, mg_funcs);
-
     // initialize the Mongoose library
     mg_init(L);
 
-    // metatable for library is itself
-    lua_pushvalue(L, -1);
+    // create library
+    luaL_newlib(L, mg_funcs);
+
+    // metatable for library: close & release resources
+    luaL_newmetatable(L, "caap.mg.library");
     lua_pushvalue(L, -1);
     lua_setfield(L, -2, "__index");
+    luaL_setfuncs(L, mg_meths, 0);
+    set_mqtt_commands(L);
+    set_ws_ops(L);
+
     lua_setmetatable(L, -2);
 
     return 1;

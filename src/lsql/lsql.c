@@ -154,7 +154,7 @@ static int cleanup (lua_State *L) {
 
 /* ********* CONNECTION ********* */
 
-static int connect (lua_State *L) {
+static int connect2db (lua_State *L) {
     const char* dbname = luaL_checkstring(L, 1);
     int readonly = lua_toboolean(L, 2);
 
@@ -244,7 +244,8 @@ static int temporary (lua_State *L) {
     return 1;
 }
 
-/* ***************************** */
+
+/******************************/
 
 static int conn_readonly (lua_State *L) {
     sqlite3 *conn = checkconn(L);
@@ -474,6 +475,8 @@ static int bind (lua_State *L) {
 }
 */
 
+/* ***************************** */
+
 static void sql_init(lua_State *L) {
     int code = sqlite3_initialize();
     sqlite3_mutex *pm = sqlite3_mutex_alloc(SQLITE_MUTEX_FAST);
@@ -484,31 +487,41 @@ static void sql_init(lua_State *L) {
 	luaL_error(L, "ERROR: initializing SQLite library, aborting, %s\n", sqlite3_errstr(code));
 }
 
+/* ***************************** */
+
 static const struct luaL_Reg sql_funcs[] = {
-    {"connect", connect},
-    {"inmem", inmemory},
-    {"temp", temporary},
-    {"backup", newBackup},
+    {"connect", connect2db},
+    {"inmem", 	inmemory},
+    {"temp", 	temporary},
+    {"backup", 	newBackup},
+    {NULL, NULL}
+};
+
+static const struct luaL_Reg sql_meths[] = {
     {"__tostring", sqlstr},
-    {"__gc", cleanup},
+    {"__gc", 	   cleanup},
     {NULL, NULL}
 };
 
 static const struct luaL_Reg conn_meths[] = {
-    {"__gc", conn_gc},
-    {"close", conn_gc},
+    {"__gc", 	conn_gc},
+    {"close", 	conn_gc},
+    {NULL, NULL}
+};
+
+static const struct luaL_Reg conn_funcs[] = {
     {"prepare", prepareStmt},
-    {"exec", exec},
-    {"import", import},
-    {"rows", newIter},
-    {"sink", newSink},
+    {"exec", 	exec},
+    {"import",  import},
+    {"rows", 	newIter},
+    {"sink", 	newSink},
     {NULL, NULL}
 };
 
 static const struct luaL_Reg stmt_meths[] = {
-    {"__gc", stmt_gc},
+    {"__gc", 	   stmt_gc},
     {"__tostring", stmt2string},
-    {"__len", stmt_count},
+    {"__len", 	   stmt_count},
     {NULL, NULL}
 };
 
@@ -517,11 +530,13 @@ static const struct luaL_Reg backup_meths[] = {
     {NULL, NULL}
 };
 
+/* ***************************** */
+
 int luaopen_lsql (lua_State *L) {
     luaL_newmetatable(L, "caap.sqlite3.connection");
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, conn_meths, 0);
+    luaL_newlib(L, conn_funcs);
+    lua_setfield(L, -2, "__index");
 
     luaL_newmetatable(L, "caap.sqlite3.backup");
     lua_pushvalue(L, -1);
@@ -533,17 +548,17 @@ int luaopen_lsql (lua_State *L) {
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, stmt_meths, 0);
 
+    // initialize the Sqlite library
+    sql_init(L);
+
     // create library
     luaL_newlib(L, sql_funcs);
 
-    // initialize the SQLite library
-    sql_init(L);
-
-    // metatable for library is itself
-    lua_pushvalue(L, -1);
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
+    // metatable for library: close & release resources
+    luaL_newmetatable(L, "caap.sqlite3.library");
+    luaL_setfuncs(L, sql_meths, 0);
     lua_setmetatable(L, -2);
 
     return 1;
 }
+
