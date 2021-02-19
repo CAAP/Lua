@@ -1,7 +1,7 @@
-#include <gdcm-2.4/gdcmImageReader.h>
-#include <gdcm-2.4/gdcmImage.h>
-#include <gdcm-2.4/gdcmScanner.h>
-#include <gdcm-2.4/gdcmStringFilter.h>
+#include <gdcmImageReader.h>
+#include <gdcmImage.h>
+#include <gdcmScanner.h>
+#include <gdcmStringFilter.h>
 
 #include <lua.hpp>
 #include <lauxlib.h>

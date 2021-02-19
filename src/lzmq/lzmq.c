@@ -837,9 +837,9 @@ static const struct luaL_Reg skt_funcs[] = {
 int luaopen_lzmq (lua_State *L) {
     luaL_newmetatable(L, "caap.zmq.socket");
     luaL_newlib(L, skt_funcs);
+    socket_opt_func(L);
     lua_setfield(L, -2, "__index");
     luaL_setfuncs(L, skt_meths, 0);
-    socket_opt_func(L);
 
     luaL_newmetatable(L, "caap.zmq.keypair");
     lua_pushvalue(L, -1);

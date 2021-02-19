@@ -9,6 +9,10 @@ local reduce	   = require'carlos.fold'.reduce
 local keys	   = require'carlos.fold'.keys
 local into	   = require'carlos.fold'.into
 local asJSON	   = require'json'.encode -- require'carlos.json'.asJSON
+local dN	   = require'binser'.deserializeN
+local sN	   = require'binser'.serialize
+local fb64	   = require'lbsd'.fromB64
+local b64	   = require'lbsd'.asB64
 local dump	   = require'carlos.files'.dump
 local sleep	   = require'lbsd'.sleep
 local env	   = os.getenv
@@ -184,13 +188,14 @@ function M.receive(srv, waitp)
     return id, more and srv:recv_msgs(waitp) or {}
 end
 
+function M.deserialize(s)
+    local a,i = dN(fb64(s), 1)
+    return a
+end
+
+function M.serialize(o) return b64(sN(o)) end
+
 -- DUMP
---local function myVersion() return format('version %s', asJSON(VERS)) end
-
---local function dumpVERS(v) dump(DEST, v) end
-
-function M.dumpVERS(v) dump(DEST, v) end
-
 function M.dumpFEED(conn, PATH, qry)
     local FIN = open(PATH, 'w')
     FIN:write'['

@@ -6,6 +6,6 @@
 
 pkill -f "app-ferre"
 
-backup
+#backup
 
 app-ferre

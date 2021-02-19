@@ -1,0 +1,42 @@
+#include <gdcmImageReader.h>
+#include <gdcmImage.h>
+#include <gdcmReader.h>
+#include <gdcmWriter.h>
+#include <gdcmAnonymizer.h>
+#include <gdcmScanner.h>
+#include <gdcmStringFilter.h>
+
+#include <lua.hpp>
+#include <lauxlib.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define checkimage(L,i) (char *)luaL_checkudata(L, i, "caap.gdcm.image")
+
+/*   ******************************   */
+
+/*   ******************************   */
+
+/*   ******************************   */
+
+
+/*   ******************************   */
+
+int luaopen_lgdcm (lua_State *L) {
+ // GDCM-Image
+ luaL_newmetatable(L, "caap.gdcm.image");
+ lua_pushvalue(L, -1); // duplicate metatable
+ lua_setfield(L, -2, "__index");
+ luaL_setfuncs(L, dcm_meths, 0);
+
+ /* create the library */
+  luaL_newlib(L, dcm_funcs);
+  return 1;
+}
+
+#ifdef __cplusplus
+}
+#endif
+
