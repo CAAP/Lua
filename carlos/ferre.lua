@@ -29,6 +29,7 @@ local assert	   = assert
 local pcall	   = pcall
 local pairs	   = pairs
 local concat	   = table.concat
+local setmetatable = setmetatable
 
 -- No more external access after this point
 _ENV = nil -- or M
@@ -194,6 +195,14 @@ function M.deserialize(s)
 end
 
 function M.serialize(o) return b64(sN(o)) end
+
+local function donothing()
+    print('****ERROR****\n')
+end
+local MT = {}
+MT.__index = function() return donothing end
+
+function M.setvoid(tb) setmetatable(tb, MT) end
 
 -- DUMP
 function M.dumpFEED(conn, PATH, qry)
