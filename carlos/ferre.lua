@@ -30,6 +30,7 @@ local pcall	   = pcall
 local pairs	   = pairs
 local concat	   = table.concat
 local setmetatable = setmetatable
+local print	   = print
 
 -- No more external access after this point
 _ENV = nil -- or M
