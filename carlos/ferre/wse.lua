@@ -57,6 +57,13 @@ function MM.accept(c)
     return fruit
 end
 
+function MM.logout(c)
+    local fruit = assert( c:opt'label' )
+    local pid = client:hget(AP, fruit) or 'NaP'
+    client:hdel(AP, fruit, pid)
+    print'\tlog me out\n\n'
+end
+
 function MM.http(c)
     connectme(c)
     print'\tconnection established\n\n+\n'
