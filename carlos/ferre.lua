@@ -30,6 +30,7 @@ local pcall	   = pcall
 local pairs	   = pairs
 local concat	   = table.concat
 local print	   = print
+local type	   = type
 local pcall	   = pcall
 
 -- No more external access after this point
