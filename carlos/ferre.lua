@@ -199,7 +199,7 @@ local function serialize(o) return b64(sN(o)) end
 
 M.serialize = serialize
 
-function M.catchAll(w, skt, cmd, msg, a)
+function M.catchall(w, skt, cmd, msg, a)
     if type(w[cmd]) == 'function' then
 	local done, err = pcall(w[cmd], skt, msg)
 	if not done then
