@@ -74,6 +74,10 @@ function MM.error(c, ...)
     c:opt('closing', true)
 end
 
+function MM.open(c)
+    print('Connected to peer:', c:ip())
+end
+
 function MM.close(c)
     print('\n+\nSSE\tbye bye', sayoonara(c), '\n+')
 end

@@ -29,8 +29,8 @@ local assert	   = assert
 local pcall	   = pcall
 local pairs	   = pairs
 local concat	   = table.concat
-local setmetatable = setmetatable
 local print	   = print
+local pcall	   = pcall
 
 -- No more external access after this point
 _ENV = nil -- or M
@@ -195,15 +195,24 @@ function M.deserialize(s)
     return a
 end
 
-function M.serialize(o) return b64(sN(o)) end
+local function serialize(o) return b64(sN(o)) end
 
-local function donothing()
-    print('****ERROR****\n')
+M.serialize = serialize
+
+function M.catchAll(w, skt, cmd, msg, a)
+    if type(w[cmd]) == 'function' then
+	local done, err = pcall(w[cmd], skt, msg)
+	if not done then
+	    a[#a] = serialize{cmd='error', data=msg, msg=err}
+	    skt:send_msgs(a)
+	end
+
+    else
+	a[#a] = serialize{cmd='error', data=msg, msg='function does not exists'}
+	skt:send_msgs(a)
+
+    end
 end
-local MT = {}
-MT.__index = function() return donothing end
-
-function M.setvoid(tb) setmetatable(tb, MT) end
 
 -- DUMP
 function M.dumpFEED(conn, PATH, qry)
