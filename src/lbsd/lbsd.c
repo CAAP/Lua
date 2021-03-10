@@ -10,6 +10,7 @@
 #include <resolv.h>
 
 #include <uuid.h>
+#include <md5.h>
 
 // // // // // // // // //
 
@@ -21,6 +22,24 @@ static const size_t UUID_SIZE = 25, OCTET_SIZE = 16;
 
 // // // // // // // // //
 
+//		  MD5	  	      //
+/*   ******************************   */
+
+static int md5_hash(lua_State *L) {
+    size_t len;
+    const char *s = luaL_checklstring(L, 1, &len);
+
+    u_int8_t buf[MD5_DIGEST_LENGTH];
+    MD5_CTX *ctx = (MD5_CTX *)lua_newuserdata(L, sizeof(MD5_CTX));
+    MD5Init( ctx );
+    MD5Update( ctx, (const u_int8_t*)s, len);
+    MD5Final( buf, ctx );
+
+    lua_pushlstring(L, (const char *)buf, MD5_DIGEST_LENGTH);
+    return 1;
+}
+
+// // // // // // // // //
 
 //		  UUID	  	      //
 /*   ******************************   */
@@ -245,6 +264,7 @@ static const struct luaL_Reg bsd_funcs[] = {
     {"uuid",	    new_uuid},
     {"asB64", 	    str2b64},
     {"fromB64",	    b642str},
+    {"md5",	    md5_hash},
     {NULL, NULL}
 };
 

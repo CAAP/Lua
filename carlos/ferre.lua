@@ -13,6 +13,7 @@ local dN	   = require'binser'.deserializeN
 local sN	   = require'binser'.serialize
 local fb64	   = require'lbsd'.fromB64
 local b64	   = require'lbsd'.asB64
+local md5	   = require'lbsd'.md5
 local dump	   = require'carlos.files'.dump
 local sleep	   = require'lbsd'.sleep
 local env	   = os.getenv
@@ -204,15 +205,21 @@ function M.catchall(w, skt, cmd, msg, a)
     if type(w[cmd]) == 'function' then
 	local done, err = pcall(w[cmd], skt, msg)
 	if not done then
-	    a[#a] = serialize{cmd='error', data=msg, msg=err}
+	    a[#a] = serialize{cmd='errorx', data=msg, msg=err}
 	    skt:send_msgs(a)
 	end
 
     else
-	a[#a] = serialize{cmd='error', data=msg, msg='function does not exists'}
+	a[#a] = serialize{cmd='errorx', data=msg, msg='function does not exists'}
 	skt:send_msgs(a)
 
     end
+end
+
+function M.digest(oldv, newv)
+    assert(oldv ~= newv, "EEROR: versions must be different")
+    if oldv > newv then oldv, newv = newv, oldv end
+    return md5(md5(oldv)..md5(newv))
 end
 
 -- DUMP

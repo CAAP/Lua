@@ -75,7 +75,7 @@ function MM.error(c, ...)
 end
 
 function MM.open(c)
-    print('Connected to peer:', c:ip())
+    print('Connected to peer:', c:ip(), '\n+\n')
 end
 
 function MM.close(c)
