@@ -219,7 +219,7 @@ end
 function M.digest(oldv, newv)
     assert(oldv ~= newv, "EEROR: versions must be different")
     if oldv > newv then oldv, newv = newv, oldv end
-    return md5(md5(oldv)..md5(newv))
+    return b64(md5(md5(oldv)..md5(newv)))
 end
 
 -- DUMP
